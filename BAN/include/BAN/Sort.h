@@ -21,26 +21,47 @@ namespace BAN::sort
 	namespace detail
 	{
 
-		template<typename It, typename Comp>
-		It partition(It begin, It end, Comp comp)
+		template<typename It>
+		struct partition_pair
 		{
-			It pivot = prev(end, 1);
+			It lt;
+			It gt;
+		};
 
-			It it1 = begin;
-			for (It it2 = begin; it2 != pivot; ++it2)
+		template<typename It, typename Comp>
+		partition_pair<It> partition(It begin, It end, Comp comp)
+		{
+			It pivot = next(begin, distance(begin, end) / 2);
+
+			It lt = begin;
+			It eq = begin;
+			It gt = end;
+
+			while (eq != gt)
 			{
-				if (comp(*it2, *pivot))
+				if (comp(*eq, *pivot))
 				{
-					swap(*it1, *it2);
-					++it1;
+					swap(*eq, *lt);
+					if (pivot == lt)
+						pivot = eq;
+					++lt;
+					++eq;
+				}
+				else if (comp(*pivot, *eq))
+				{
+					--gt;
+					swap(*eq, *gt);
+					if (pivot == gt)
+						pivot = eq;
+				}
+				else
+				{
+					++eq;
 				}
 			}
 
-			swap(*it1, *pivot);
-
-			return it1;
+			return { lt, gt };
 		}
-
 	}
 
 	template<typename It, typename Comp = less<it_value_type_t<It>>>
@@ -48,9 +69,9 @@ namespace BAN::sort
 	{
 		if (distance(begin, end) <= 1)
 			return;
-		It mid = detail::partition(begin, end, comp);
-		quick_sort(begin, mid, comp);
-		quick_sort(++mid, end, comp);
+		const auto [lt, gt] = detail::partition(begin, end, comp);
+		quick_sort(begin, lt, comp);
+		quick_sort(gt, end, comp);
 	}
 
 	template<typename It, typename Comp = less<it_value_type_t<It>>>
@@ -85,9 +106,9 @@ namespace BAN::sort
 				return insertion_sort(begin, end, comp);
 			if (max_depth == 0)
 				return heap_sort(begin, end, comp);
-			It mid = detail::partition(begin, end, comp);
-			intro_sort_impl(begin, mid, max_depth - 1, comp);
-			intro_sort_impl(++mid, end, max_depth - 1, comp);
+			const auto [lt, gt] = detail::partition(begin, end, comp);
+			intro_sort_impl(begin, lt, max_depth - 1, comp);
+			intro_sort_impl(gt, end, max_depth - 1, comp);
 		}
 
 	}
@@ -116,27 +137,20 @@ namespace BAN::sort
 
 	template<typename It, size_t radix = 256>
 	requires is_unsigned_v<it_value_type_t<It>> && (radix > 0 && (radix & (radix - 1)) == 0)
-	BAN::ErrorOr<void> radix_sort(It begin, It end)
+	void radix_sort(It begin, It end, BAN::Span<it_value_type_t<It>> storage)
 	{
-		using value_type = it_value_type_t<It>;
-
 		const size_t len = distance(begin, end);
 		if (len <= 1)
-			return {};
+			return;
 
-		Vector<value_type> temp;
-		TRY(temp.resize(len));
-
-		Vector<size_t> counts;
-		TRY(counts.resize(radix));
+		ASSERT(storage.size() >= len);
 
 		constexpr size_t mask  = radix - 1;
 		constexpr size_t shift = detail::lsb_index(radix);
 
-		for (size_t s = 0; s < sizeof(value_type) * 8; s += shift)
+		for (size_t s = 0; s < sizeof(it_value_type_t<It>) * 8; s += shift)
 		{
-			for (auto& cnt : counts)
-				cnt = 0;
+			size_t counts[radix] {};
 			for (It it = begin; it != end; ++it)
 				counts[(*it >> s) & mask]++;
 
@@ -146,12 +160,27 @@ namespace BAN::sort
 			for (It it = end; it != begin;)
 			{
 				--it;
-				temp[--counts[(*it >> s) & mask]] = *it;
+				storage[--counts[(*it >> s) & mask]] = *it;
 			}
 
-			for (size_t j = 0; j < temp.size(); j++)
-				*next(begin, j) = temp[j];
+			It it = begin;
+			for (size_t j = 0; j < storage.size(); j++, ++it)
+				*it = storage[j];
 		}
+	}
+
+	template<typename It, size_t radix = 256>
+	requires is_unsigned_v<it_value_type_t<It>> && (radix > 0 && (radix & (radix - 1)) == 0)
+	BAN::ErrorOr<void> radix_sort(It begin, It end)
+	{
+		const size_t len = distance(begin, end);
+		if (len <= 1)
+			return {};
+
+		Vector<it_value_type_t<It>> temp;
+		TRY(temp.resize(len));
+
+		radix_sort(begin, end, temp.span());
 
 		return {};
 	}

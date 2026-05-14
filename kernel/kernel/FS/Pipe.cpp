@@ -5,6 +5,7 @@
 
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 
 namespace Kernel
 {
@@ -73,6 +74,8 @@ namespace Kernel
 
 	BAN::ErrorOr<size_t> Pipe::read_impl(off_t, BAN::ByteSpan buffer)
 	{
+		LockGuard _(m_mutex);
+
 		while (m_buffer->empty())
 		{
 			if (m_writing_count == 0)
@@ -95,6 +98,8 @@ namespace Kernel
 
 	BAN::ErrorOr<size_t> Pipe::write_impl(off_t, BAN::ConstByteSpan buffer)
 	{
+		LockGuard _(m_mutex);
+
 		while (m_buffer->full())
 		{
 			if (m_reading_count == 0)
@@ -117,6 +122,18 @@ namespace Kernel
 		m_thread_blocker.unblock();
 
 		return to_copy;
+	}
+
+
+	BAN::ErrorOr<long> Pipe::ioctl_impl(int cmd, void* arg)
+	{
+		switch (cmd)
+		{
+			case TIOCGWINSZ:
+			case TIOCSWINSZ:
+				return BAN::Error::from_errno(EINVAL);
+		}
+		return Inode::ioctl_impl(cmd, arg);
 	}
 
 }

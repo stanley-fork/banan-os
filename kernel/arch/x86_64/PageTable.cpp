@@ -369,26 +369,40 @@ namespace Kernel
 
 	void PageTable::map_fast_page(paddr_t paddr)
 	{
-		ASSERT(paddr && paddr % PAGE_SIZE == 0);
-
-		ASSERT(s_fast_page_pt);
-		ASSERT(s_fast_page_lock.current_processor_has_lock());
-
-		ASSERT(!(*s_fast_page_pt & Flags::Present));
-		s_fast_page_pt[0] = paddr | Flags::ReadWrite | Flags::Present;
-
-		asm volatile("invlpg (%0)" :: "r"(fast_page()));
+		map_fast_page(0, paddr);
 	}
 
 	void PageTable::unmap_fast_page()
 	{
+		unmap_fast_page(0);
+	}
+
+	void* PageTable::map_fast_page(size_t index, paddr_t paddr)
+	{
+		ASSERT(paddr && paddr % PAGE_SIZE == 0);
+
+		ASSERT(index < 512);
 		ASSERT(s_fast_page_pt);
 		ASSERT(s_fast_page_lock.current_processor_has_lock());
 
-		ASSERT((*s_fast_page_pt & Flags::Present));
-		s_fast_page_pt[0] = 0;
+		ASSERT(!(s_fast_page_pt[index] & Flags::Present));
+		s_fast_page_pt[index] = paddr | Flags::ReadWrite | Flags::Present;
 
-		asm volatile("invlpg (%0)" :: "r"(fast_page()));
+		void* address = reinterpret_cast<void*>(fast_page() + index * PAGE_SIZE);
+		asm volatile("invlpg (%0)" :: "r"(address));
+		return address;
+	}
+
+	void PageTable::unmap_fast_page(size_t index)
+	{
+		ASSERT(index < 512);
+		ASSERT(s_fast_page_pt);
+		ASSERT(s_fast_page_lock.current_processor_has_lock());
+
+		ASSERT((s_fast_page_pt[index] & Flags::Present));
+		s_fast_page_pt[index] = 0;
+
+		asm volatile("invlpg (%0)" :: "r"(fast_page() + index * PAGE_SIZE));
 	}
 
 	BAN::ErrorOr<PageTable*> PageTable::create_userspace()
@@ -458,8 +472,8 @@ namespace Kernel
 			;
 		else if (pages <= 32 || !s_is_initialized)
 		{
-			for (size_t i = 0; i < pages; i++, vaddr += PAGE_SIZE)
-				asm volatile("invlpg (%0)" :: "r"(vaddr));
+			for (size_t i = 0; i < pages; i++)
+				asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
 		}
 		else if (is_userspace || !s_has_pge)
 		{
@@ -729,8 +743,7 @@ namespace Kernel
 
 	paddr_t PageTable::physical_address_of(vaddr_t addr) const
 	{
-		uint64_t page_data = get_page_data(addr);
-		return page_data & s_page_addr_mask;
+		return get_page_data(addr) & s_page_addr_mask;
 	}
 
 	bool PageTable::reserve_page(vaddr_t vaddr, bool only_free, bool invalidate)
@@ -861,7 +874,7 @@ namespace Kernel
 			{
 				if (!is_canonical(vaddr + page * PAGE_SIZE))
 				{
-					vaddr = canonicalize(uncanonicalize(vaddr) + page * PAGE_SIZE);
+					vaddr = canonicalize(uncanonicalize(vaddr + page * PAGE_SIZE));
 					valid = false;
 					break;
 				}

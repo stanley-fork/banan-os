@@ -1,5 +1,6 @@
 #include <BAN/Assert.h>
 #include <BAN/Debug.h>
+#include <BAN/ScopeGuard.h>
 #include <BAN/StringView.h>
 
 #include <LibELF/AuxiliaryVector.h>
@@ -208,6 +209,18 @@ static void __dump_backtrace(int sig, siginfo_t*, void* context)
 			return "unknown signal";
 		};
 
+	// NOTE: we cannot use stddbg as that is not async-signal-safe.
+	//       POSIX says dprintf isn't either but our implementation is!
+
+	int fd = open("/dev/debug", O_WRONLY);
+	if (fd == -1)
+	{
+		perror("failed to open debug device for backtrace");
+		return;
+	}
+
+	dprintf(fd, "received %s, backtrace:\n", signal_name(sig));
+
 	const auto* ucontext = static_cast<ucontext_t*>(context);
 #if defined(__x86_64__)
 	const uintptr_t stack_base = ucontext->uc_mcontext.gregs[REG_RBP];
@@ -224,18 +237,6 @@ static void __dump_backtrace(int sig, siginfo_t*, void* context)
 	};
 
 	const auto* stackframe = reinterpret_cast<struct stackframe*>(stack_base);
-
-	// NOTE: we cannot use stddbf as that is not async-signal-safe.
-	//       POSIX says dprintf isn't either but our implementation is!
-
-	int fd = open("/dev/debug", O_WRONLY);
-	if (fd == -1)
-	{
-		perror("failed to open debug device for backtrace");
-		return;
-	}
-
-	dprintf(fd, "received %s, backtrace:\n", signal_name(sig));
 
 	__dump_symbol(fd, reinterpret_cast<void*>(instruction));
 	for (size_t i = 0; i < 128 && stackframe; i++)
@@ -436,18 +437,20 @@ static int exec_impl(const char* pathname, char* const* argv, char* const* envp,
 static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, char* const* envp, int shebang_depth)
 {
 	constexpr size_t buffer_len = PATH_MAX + 1 + ARG_MAX + 1;
+
 	char* buffer = static_cast<char*>(malloc(buffer_len));
 	if (buffer == nullptr)
 	{
 		fclose(fp);
 		return -1;
 	}
+	BAN::ScopeGuard _1([buffer] { free(buffer); });
 
-	if (fgets(buffer, buffer_len, fp) == nullptr)
-	{
-		free(buffer);
+	buffer = fgets(buffer, buffer_len, fp);
+	fclose(fp);
+
+	if (buffer == nullptr)
 		return -1;
-	}
 
 	const auto sv_trim_whitespace =
 		[](BAN::StringView sv) -> BAN::StringView
@@ -462,7 +465,6 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 	BAN::StringView buffer_sv = buffer;
 	if (buffer_sv.back() != '\n')
 	{
-		free(buffer);
 		errno = ENOEXEC;
 		return -1;
 	}
@@ -479,7 +481,6 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 
 	if (interpreter.empty())
 	{
-		free(buffer);
 		errno = ENOEXEC;
 		return -1;
 	}
@@ -496,22 +497,19 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 	const size_t extra_args = 1 + !argument.empty();
 	char** new_argv = static_cast<char**>(malloc((extra_args + old_argc + 1) * sizeof(char*)));;
 	if (new_argv == nullptr)
-	{
-		free(buffer);
 		return -1;
-	}
+	BAN::ScopeGuard _2([new_argv] { free(new_argv); });
 
 	new_argv[0] = const_cast<char*>(pathname);
 	if (!argument.empty())
 		new_argv[1] = const_cast<char*>(argument.data());
-	for (size_t i = 0; i < old_argc; i++)
-		new_argv[i + extra_args] = argv[i];
-	new_argv[old_argc + extra_args] = nullptr;
+	if (old_argc)
+		new_argv[extra_args] = const_cast<char*>(pathname);
+	for (size_t i = 1; i < old_argc; i++)
+		new_argv[extra_args + i] = argv[i];
+	new_argv[extra_args + old_argc] = nullptr;
 
-	exec_impl(interpreter.data(), new_argv, envp, true, shebang_depth + 1);
-	free(new_argv);
-	free(buffer);
-	return -1;
+	return exec_impl(interpreter.data(), new_argv, envp, true, shebang_depth + 1);
 }
 
 static int execl_impl(const char* pathname, const char* arg0, va_list ap, bool has_env, bool do_path_resolution)

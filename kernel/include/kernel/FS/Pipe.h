@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BAN/Array.h>
 #include <kernel/FS/Inode.h>
+#include <kernel/Lock/Mutex.h>
 #include <kernel/Memory/ByteRingBuffer.h>
 #include <kernel/ThreadBlocker.h>
 
@@ -44,6 +44,8 @@ namespace Kernel
 		virtual bool has_error_impl() const override { return m_reading_count == 0; }
 		virtual bool has_hungup_impl() const override { return m_writing_count == 0; }
 
+		virtual BAN::ErrorOr<long> ioctl_impl(int, void*) override;
+
 	private:
 		Pipe(const Credentials&);
 
@@ -53,6 +55,8 @@ namespace Kernel
 		timespec m_atime {};
 		timespec m_mtime {};
 		timespec m_ctime {};
+
+		Mutex m_mutex;
 		ThreadBlocker m_thread_blocker;
 
 		BAN::UniqPtr<ByteRingBuffer> m_buffer;

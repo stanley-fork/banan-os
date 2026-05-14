@@ -47,7 +47,7 @@ namespace Kernel
 	{
 		if (m_inode.links_count > 0)
 			return;
-		if (auto ret = cleanup_from_fs(); ret.is_error())
+		if (auto ret = cleanup_from_fs_no_lock(); ret.is_error())
 			dwarnln("Could not cleanup inode from FS: {}", ret.error());
 	}
 
@@ -56,7 +56,7 @@ namespace Kernel
 		return &m_fs;
 	}
 
-	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::block_from_indirect_block(uint32_t& block, uint32_t index, uint32_t depth, bool allocate)
+	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::block_from_indirect_block_no_lock(uint32_t& block, uint32_t index, uint32_t depth, bool allocate)
 	{
 		const uint32_t inode_blocks_per_fs_block = blksize() / 512;
 		const uint32_t indices_per_fs_block = blksize() / sizeof(uint32_t);
@@ -102,7 +102,7 @@ namespace Kernel
 		uint32_t& new_block = block_buffer.span().as_span<uint32_t>()[(index / divisor) % indices_per_fs_block];
 		const auto old_block = new_block;
 
-		const auto result = TRY(block_from_indirect_block(new_block, index, depth - 1, allocate));
+		const auto result = TRY(block_from_indirect_block_no_lock(new_block, index, depth - 1, allocate));
 
 		if (needs_write || old_block != new_block)
 			TRY(m_fs.write_block(block, block_buffer));
@@ -110,7 +110,7 @@ namespace Kernel
 		return result;
 	}
 
-	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::fs_block_of_data_block_index(uint32_t data_block_index, bool allocate)
+	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::fs_block_of_data_block_index_no_lock(uint32_t data_block_index, bool allocate)
 	{
 		const uint32_t inode_blocks_per_fs_block = blksize() / 512;
 		const uint32_t indices_per_block = blksize() / sizeof(uint32_t);
@@ -136,15 +136,15 @@ namespace Kernel
 		data_block_index -= 12;
 
 		if (data_block_index < indices_per_block)
-			return block_from_indirect_block(m_inode.block[12], data_block_index, 1, allocate);
+			return block_from_indirect_block_no_lock(m_inode.block[12], data_block_index, 1, allocate);
 		data_block_index -= indices_per_block;
 
 		if (data_block_index < indices_per_block * indices_per_block)
-			return block_from_indirect_block(m_inode.block[13], data_block_index, 2, allocate);
+			return block_from_indirect_block_no_lock(m_inode.block[13], data_block_index, 2, allocate);
 		data_block_index -= indices_per_block * indices_per_block;
 
 		if (data_block_index < indices_per_block * indices_per_block * indices_per_block)
-			return block_from_indirect_block(m_inode.block[14], data_block_index, 3, allocate);
+			return block_from_indirect_block_no_lock(m_inode.block[14], data_block_index, 3, allocate);
 
 		ASSERT_NOT_REACHED();
 	}
@@ -152,6 +152,9 @@ namespace Kernel
 	BAN::ErrorOr<BAN::String> Ext2Inode::link_target_impl()
 	{
 		ASSERT(mode().iflnk());
+
+		RWLockRDGuard _(m_lock);
+
 		if (m_inode.size < sizeof(m_inode.block))
 		{
 			BAN::String result;
@@ -168,14 +171,16 @@ namespace Kernel
 	BAN::ErrorOr<void> Ext2Inode::set_link_target_impl(BAN::StringView target)
 	{
 		ASSERT(mode().iflnk());
+
+		RWLockWRGuard _(m_lock);
 		if (target.size() < sizeof(m_inode.block))
 		{
 			if (m_inode.size >= sizeof(m_inode.block))
-				TRY(cleanup_data_blocks());
+				TRY(cleanup_data_blocks_no_lock());
 			memset(m_inode.block, 0, sizeof(m_inode.block));
 			memcpy(m_inode.block, target.data(), target.size());
 			m_inode.size = target.size();
-			TRY(sync());
+			TRY(sync_no_lock());
 			return {};
 		}
 
@@ -194,10 +199,12 @@ namespace Kernel
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= UINT32_MAX || buffer.size() >= UINT32_MAX || buffer.size() >= (size_t)(UINT32_MAX - offset))
 			return BAN::Error::from_errno(EOVERFLOW);
 
+		RWLockRDGuard _0(m_lock);
+
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= m_inode.size)
 			return 0;
 
-		ScopedSync _(*this);
+		ScopedSync _1(*this);
 
 		uint32_t count = buffer.size();
 		if (offset + buffer.size() > m_inode.size)
@@ -214,7 +221,7 @@ namespace Kernel
 
 		for (uint32_t data_block_index = first_block; data_block_index < last_block; data_block_index++)
 		{
-			auto block_index = TRY(fs_block_of_data_block_index(data_block_index, false));
+			auto block_index = TRY(fs_block_of_data_block_index_no_lock(data_block_index, false));
 			if (block_index.has_value())
 				TRY(m_fs.read_block(block_index.value(), block_buffer));
 			else
@@ -240,6 +247,8 @@ namespace Kernel
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= UINT32_MAX || buffer.size() >= UINT32_MAX || buffer.size() >= (size_t)(UINT32_MAX - offset))
 			return BAN::Error::from_errno(EOVERFLOW);
 
+		RWLockWRGuard _0(m_lock);
+
 		if (m_inode.size < offset + buffer.size())
 			TRY(truncate_impl(offset + buffer.size()));
 
@@ -255,7 +264,7 @@ namespace Kernel
 		// Write partial block
 		if (offset % block_size)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(offset / block_size, true));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(offset / block_size, true));
 			ASSERT(block_index.has_value());
 
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
@@ -273,7 +282,7 @@ namespace Kernel
 
 		while (to_write >= block_size)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(offset / block_size, true));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(offset / block_size, true));
 			ASSERT(block_index.has_value());
 
 			memcpy(block_buffer.data(), buffer.data() + written, block_buffer.size());
@@ -286,7 +295,7 @@ namespace Kernel
 
 		if (to_write > 0)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(offset / block_size, true));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(offset / block_size, true));
 			ASSERT(block_index.has_value());
 
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
@@ -300,6 +309,8 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Ext2Inode::truncate_impl(size_t new_size)
 	{
+		RWLockWRGuard _(m_lock);
+
 		if (m_inode.size == new_size)
 			return {};
 
@@ -308,7 +319,7 @@ namespace Kernel
 		const auto old_size = m_inode.size;
 
 		m_inode.size = new_size;
-		if (auto ret = sync(); ret.is_error())
+		if (auto ret = sync_no_lock(); ret.is_error())
 		{
 			m_inode.size = old_size;
 			return ret.release_error();
@@ -320,13 +331,16 @@ namespace Kernel
 	BAN::ErrorOr<void> Ext2Inode::chmod_impl(mode_t mode)
 	{
 		ASSERT((mode & Inode::Mode::TYPE_MASK) == 0);
+
+		RWLockWRGuard _(m_lock);
+
 		if (m_inode.mode == mode)
 			return {};
 
 		const auto old_mode = m_inode.mode;
 
 		m_inode.mode = (m_inode.mode & Inode::Mode::TYPE_MASK) | mode;
-		if (auto ret = sync(); ret.is_error())
+		if (auto ret = sync_no_lock(); ret.is_error())
 		{
 			m_inode.mode = old_mode;
 			return ret.release_error();
@@ -337,6 +351,8 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Ext2Inode::chown_impl(uid_t uid, gid_t gid)
 	{
+		RWLockWRGuard _(m_lock);
+
 		if (m_inode.uid == uid && m_inode.gid == gid)
 			return {};
 
@@ -345,7 +361,7 @@ namespace Kernel
 
 		m_inode.uid = uid;
 		m_inode.gid = gid;
-		if (auto ret = sync(); ret.is_error())
+		if (auto ret = sync_no_lock(); ret.is_error())
 		{
 			m_inode.uid = old_uid;
 			m_inode.gid = old_gid;
@@ -357,6 +373,8 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Ext2Inode::utimens_impl(const timespec times[2])
 	{
+		RWLockWRGuard _(m_lock);
+
 		const uint32_t old_times[2] {
 			m_inode.atime,
 			m_inode.mtime,
@@ -367,7 +385,7 @@ namespace Kernel
 		if (times[1].tv_nsec != UTIME_OMIT)
 			m_inode.mtime = times[1].tv_sec;
 
-		if (auto ret = sync(); ret.is_error())
+		if (auto ret = sync_no_lock(); ret.is_error())
 		{
 			m_inode.atime = old_times[0];
 			m_inode.mtime = old_times[1];
@@ -379,13 +397,14 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Ext2Inode::fsync_impl()
 	{
+		RWLockRDGuard _(m_lock);
 		for (size_t i = 0; i < max_used_data_block_count(); i++)
-			if (const auto fs_block = TRY(fs_block_of_data_block_index(i, false)); fs_block.has_value())
+			if (const auto fs_block = TRY(fs_block_of_data_block_index_no_lock(i, false)); fs_block.has_value())
 				TRY(m_fs.sync_block(fs_block.value()));
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::cleanup_indirect_block(uint32_t block, uint32_t depth)
+	BAN::ErrorOr<void> Ext2Inode::cleanup_indirect_block_no_lock(uint32_t block, uint32_t depth)
 	{
 		ASSERT(block);
 
@@ -404,14 +423,14 @@ namespace Kernel
 			const uint32_t next_block = block_buffer.span().as_span<uint32_t>()[i];
 			if (next_block == 0)
 				continue;
-			TRY(cleanup_indirect_block(next_block, depth - 1));
+			TRY(cleanup_indirect_block_no_lock(next_block, depth - 1));
 		}
 
 		TRY(m_fs.release_block(block));
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::cleanup_data_blocks()
+	BAN::ErrorOr<void> Ext2Inode::cleanup_data_blocks_no_lock()
 	{
 		if (mode().iflnk() && (size_t)size() < sizeof(m_inode.block))
 			goto done;
@@ -423,25 +442,25 @@ namespace Kernel
 
 		// cleanup indirect blocks
 		if (m_inode.block[12])
-			TRY(cleanup_indirect_block(m_inode.block[12], 1));
+			TRY(cleanup_indirect_block_no_lock(m_inode.block[12], 1));
 		if (m_inode.block[13])
-			TRY(cleanup_indirect_block(m_inode.block[13], 2));
+			TRY(cleanup_indirect_block_no_lock(m_inode.block[13], 2));
 		if (m_inode.block[14])
-			TRY(cleanup_indirect_block(m_inode.block[14], 3));
+			TRY(cleanup_indirect_block_no_lock(m_inode.block[14], 3));
 
 done:
 		// mark blocks as deleted
 		memset(m_inode.block, 0x00, sizeof(m_inode.block));
 
-		TRY(sync());
+		TRY(sync_no_lock());
 
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::cleanup_from_fs()
+	BAN::ErrorOr<void> Ext2Inode::cleanup_from_fs_no_lock()
 	{
 		ASSERT(m_inode.links_count == 0);
-		TRY(cleanup_data_blocks());
+		TRY(cleanup_data_blocks_no_lock());
 		TRY(m_fs.delete_inode(ino()));
 		return {};
 	}
@@ -451,10 +470,12 @@ done:
 		ASSERT(mode().ifdir());
 		ASSERT(offset >= 0);
 
+		RWLockRDGuard _(m_lock);
+
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= max_used_data_block_count())
 			return 0;
 
-		const auto block_index = TRY(fs_block_of_data_block_index(offset, false));
+		const auto block_index = TRY(fs_block_of_data_block_index_no_lock(offset, false));
 		if (!block_index.has_value())
 			return BAN::Error::from_errno(ENODATA);
 
@@ -524,9 +545,8 @@ done:
 	{
 		ASSERT(mode_has_valid_type(mode));
 
-		timespec current_time = SystemTimer::get().real_time();
-		return Ext2::Inode
-		{
+		const timespec current_time = SystemTimer::get().real_time();
+		return Ext2::Inode {
 			.mode			= (uint16_t)mode,
 			.uid			= (uint16_t)uid,
 			.size			= 0,
@@ -552,9 +572,6 @@ done:
 	{
 		ASSERT(this->mode().ifdir());
 
-		if (!find_inode_impl(name).is_error())
-			return BAN::Error::from_errno(EEXIST);
-
 		switch (mode & Inode::Mode::TYPE_MASK)
 		{
 			case Inode::Mode::IFLNK:
@@ -564,6 +581,11 @@ done:
 				break;
 			return BAN::Error::from_errno(ENOTSUP);
 		}
+
+		RWLockWRGuard _(m_lock);
+
+		if (!find_inode_no_lock(name).is_error())
+			return BAN::Error::from_errno(EEXIST);
 
 		const uint32_t new_ino = TRY(m_fs.create_inode(initialize_new_inode_info(mode, uid, gid)));
 
@@ -576,7 +598,7 @@ done:
 
 		auto inode = inode_or_error.release_value();
 
-		TRY(link_inode_to_directory(*inode, name));
+		TRY(link_inode_to_directory_no_lock(*inode, name));
 
 		return {};
 	}
@@ -586,7 +608,9 @@ done:
 		ASSERT(this->mode().ifdir());
 		ASSERT(Mode(mode).ifdir());
 
-		if (!find_inode_impl(name).is_error())
+		RWLockWRGuard _(m_lock);
+
+		if (!find_inode_no_lock(name).is_error())
 			return BAN::Error::from_errno(EEXIST);
 
 		const uint32_t new_ino = TRY(m_fs.create_inode(initialize_new_inode_info(mode, uid, gid)));
@@ -601,14 +625,14 @@ done:
 		auto inode = inode_or_error.release_value();
 
 		// link . and ..
-		if (auto ret = inode->link_inode_to_directory(*inode, "."_sv); ret.is_error())
-			return ({ TRY(inode->cleanup_from_fs()); ret.release_error(); });
-		if (auto ret = inode->link_inode_to_directory(*this, ".."_sv); ret.is_error())
-			return ({ TRY(inode->cleanup_from_fs()); ret.release_error(); });
+		if (auto ret = inode->link_inode_to_directory_no_lock(*inode, "."_sv); ret.is_error())
+			return ({ TRY(inode->cleanup_from_fs_no_lock()); ret.release_error(); });
+		if (auto ret = inode->link_inode_to_directory_no_lock(*this, ".."_sv); ret.is_error())
+			return ({ TRY(inode->cleanup_from_fs_no_lock()); ret.release_error(); });
 
 		// link to parent
-		if (auto ret = link_inode_to_directory(*inode, name); ret.is_error())
-			return ({ TRY(inode->cleanup_from_fs()); ret.release_error(); });
+		if (auto ret = link_inode_to_directory_no_lock(*inode, name); ret.is_error())
+			return ({ TRY(inode->cleanup_from_fs_no_lock()); ret.release_error(); });
 
 		return {};
 	}
@@ -619,11 +643,13 @@ done:
 		ASSERT(!inode->mode().ifdir());
 		ASSERT(&m_fs == inode->filesystem());
 
-		if (!find_inode_impl(name).is_error())
+		RWLockWRGuard _(m_lock);
+
+		if (!find_inode_no_lock(name).is_error())
 			return BAN::Error::from_errno(EEXIST);
 
 		auto ext2_inode = static_cast<Ext2Inode*>(inode.ptr());
-		TRY(link_inode_to_directory(*ext2_inode, name));
+		TRY(link_inode_to_directory_no_lock(*ext2_inode, name));
 
 		return {};
 	}
@@ -636,30 +662,31 @@ done:
 
 		auto* ext2_parent = static_cast<Ext2Inode*>(old_parent.ptr());
 
-		// FIXME: possible deadlock :)
-		LockGuard _(ext2_parent->m_mutex);
+		// FIXME: is this a possible deadlock?
+		RWLockWRGuard _0(ext2_parent->m_lock);
+		RWLockWRGuard _1(m_lock);
 
-		auto old_inode = TRY(ext2_parent->find_inode_impl(old_name));
+		auto old_inode = TRY(ext2_parent->find_inode_no_lock(old_name));
 		auto* ext2_inode = static_cast<Ext2Inode*>(old_inode.ptr());
 
-		if (auto replace_or_error = find_inode_impl(new_name); replace_or_error.is_error())
+		if (auto find_result = find_inode_no_lock(new_name); find_result.is_error())
 		{
-			if (replace_or_error.error().get_error_code() != ENOENT)
-				return replace_or_error.release_error();
+			if (find_result.error().get_error_code() != ENOENT)
+				return find_result.release_error();
 		}
 		else
 		{
-			TRY(unlink_impl(new_name));
+			TRY(remove_inode_from_directory_no_lock(new_name, true));
 		}
 
-		TRY(link_inode_to_directory(*ext2_inode, new_name));
+		TRY(link_inode_to_directory_no_lock(*ext2_inode, new_name));
 
-		TRY(ext2_parent->remove_inode_from_directory(old_name, false));
+		TRY(ext2_parent->remove_inode_from_directory_no_lock(old_name, false));
 
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::link_inode_to_directory(Ext2Inode& inode, BAN::StringView name)
+	BAN::ErrorOr<void> Ext2Inode::link_inode_to_directory_no_lock(Ext2Inode& inode, BAN::StringView name)
 	{
 		if (!this->mode().ifdir())
 			return BAN::Error::from_errno(ENOTDIR);
@@ -673,7 +700,7 @@ done:
 			return BAN::Error::from_errno(ENOTSUP);
 		}
 
-		auto error_or = find_inode_impl(name);
+		auto error_or = find_inode_no_lock(name);
 		if (!error_or.is_error())
 			return BAN::Error::from_errno(EEXIST);
 		if (error_or.error().get_error_code() != ENOENT)
@@ -705,7 +732,7 @@ done:
 				memcpy(new_entry.name, name.data(), name.size());
 
 				inode.m_inode.links_count++;
-				TRY(inode.sync());
+				TRY(inode.sync_no_lock());
 
 				return {};
 			};
@@ -723,7 +750,7 @@ done:
 			goto needs_new_block;
 
 		// Try to insert inode to last data block
-		block_index = TRY(fs_block_of_data_block_index(data_block_count - 1, true)).value();
+		block_index = TRY(fs_block_of_data_block_index_no_lock(data_block_count - 1, true)).value();
 		TRY(m_fs.read_block(block_index, block_buffer));
 
 		while (entry_offset < block_size)
@@ -754,7 +781,7 @@ done:
 		}
 
 needs_new_block:
-		block_index = TRY(fs_block_of_data_block_index(data_block_count, true)).value();
+		block_index = TRY(fs_block_of_data_block_index_no_lock(data_block_count, true)).value();
 		m_inode.size += blksize();
 
 		memset(block_buffer.data(), 0x00, block_buffer.size());
@@ -764,7 +791,7 @@ needs_new_block:
 		return {};
 	}
 
-	BAN::ErrorOr<bool> Ext2Inode::is_directory_empty()
+	BAN::ErrorOr<bool> Ext2Inode::is_directory_empty_no_lock()
 	{
 		ASSERT(mode().ifdir());
 
@@ -773,7 +800,7 @@ needs_new_block:
 		// Confirm that this doesn't contain anything else than '.' or '..'
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(i, false));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(i, false));
 			if (!block_index.has_value())
 				continue;
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
@@ -797,20 +824,21 @@ needs_new_block:
 		return true;
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::cleanup_default_links()
+	BAN::ErrorOr<void> Ext2Inode::cleanup_default_links_no_lock()
 	{
 		ASSERT(mode().ifdir());
+
+		auto block_buffer = TRY(m_fs.get_block_buffer());
+
 		if (m_inode.flags & Ext2::Enum::INDEX_FL)
 		{
 			dwarnln("deletion of indexed directory is not supported");
 			return BAN::Error::from_errno(ENOTSUP);
 		}
 
-		auto block_buffer = TRY(m_fs.get_block_buffer());
-
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(i, false));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(i, false));
 			if (!block_index.has_value())
 				continue;
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
@@ -829,13 +857,13 @@ needs_new_block:
 					if (entry_name == "."_sv)
 					{
 						m_inode.links_count--;
-						TRY(sync());
+						TRY(sync_no_lock());
 					}
 					else if (entry_name == ".."_sv)
 					{
 						auto parent = TRY(Ext2Inode::create(m_fs, entry.inode));
 						parent->m_inode.links_count--;
-						TRY(parent->sync());
+						TRY(parent->sync_no_lock());
 					}
 					else
 						ASSERT_NOT_REACHED();
@@ -854,20 +882,21 @@ needs_new_block:
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::remove_inode_from_directory(BAN::StringView name, bool cleanup_directory)
+	BAN::ErrorOr<void> Ext2Inode::remove_inode_from_directory_no_lock(BAN::StringView name, bool cleanup_directory)
 	{
 		ASSERT(mode().ifdir());
+
+		auto block_buffer = TRY(m_fs.get_block_buffer());
+
 		if (m_inode.flags & Ext2::Enum::INDEX_FL)
 		{
 			dwarnln("deletion from indexed directory is not supported");
 			return BAN::Error::from_errno(ENOTSUP);
 		}
 
-		auto block_buffer = TRY(m_fs.get_block_buffer());
-
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(i, false));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(i, false));
 			if (!block_index.has_value())
 				continue;
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
@@ -881,9 +910,9 @@ needs_new_block:
 					auto inode = TRY(Ext2Inode::create(m_fs, entry.inode));
 					if (cleanup_directory && inode->mode().ifdir())
 					{
-						if (!TRY(inode->is_directory_empty()))
+						if (!TRY(inode->is_directory_empty_no_lock()))
 							return BAN::Error::from_errno(ENOTEMPTY);
-						TRY(inode->cleanup_default_links());
+						TRY(inode->cleanup_default_links_no_lock());
 					}
 
 					if (inode->nlink() == 0)
@@ -891,7 +920,7 @@ needs_new_block:
 					else
 						inode->m_inode.links_count--;
 
-					TRY(sync());
+					TRY(sync_no_lock());
 
 					// NOTE: If this was the last link to inode we must
 					//       remove it from inode cache to trigger cleanup
@@ -915,11 +944,12 @@ needs_new_block:
 
 	BAN::ErrorOr<void> Ext2Inode::unlink_impl(BAN::StringView name)
 	{
-		TRY(remove_inode_from_directory(name, true));
+		RWLockWRGuard _(m_lock);
+		TRY(remove_inode_from_directory_no_lock(name, true));
 		return {};
 	}
 
-	BAN::ErrorOr<void> Ext2Inode::sync()
+	BAN::ErrorOr<void> Ext2Inode::sync_no_lock()
 	{
 		auto inode_location = TRY(m_fs.locate_inode(ino()));
 		auto block_buffer = TRY(m_fs.get_block_buffer());
@@ -936,13 +966,19 @@ needs_new_block:
 
 	BAN::ErrorOr<BAN::RefPtr<Inode>> Ext2Inode::find_inode_impl(BAN::StringView file_name)
 	{
+		RWLockRDGuard _(m_lock);
+		return find_inode_no_lock(file_name);
+	}
+
+	BAN::ErrorOr<BAN::RefPtr<Inode>> Ext2Inode::find_inode_no_lock(BAN::StringView file_name)
+	{
 		ASSERT(mode().ifdir());
 
 		auto block_buffer = TRY(m_fs.get_block_buffer());
 
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
 		{
-			const auto block_index = TRY(fs_block_of_data_block_index(i, false));
+			const auto block_index = TRY(fs_block_of_data_block_index_no_lock(i, false));
 			if (!block_index.has_value())
 				continue;
 			TRY(m_fs.read_block(block_index.value(), block_buffer));
