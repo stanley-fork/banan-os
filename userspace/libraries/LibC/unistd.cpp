@@ -1,6 +1,5 @@
 #include <BAN/Assert.h>
 #include <BAN/Debug.h>
-#include <BAN/ScopeGuard.h>
 #include <BAN/StringView.h>
 
 #include <LibELF/AuxiliaryVector.h>
@@ -21,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/banan-os.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -350,7 +350,8 @@ int dup2(int fildes, int fildes2)
 
 int isatty(int fildes)
 {
-	return syscall(SYS_ISATTY, fildes) >= 0;
+	struct termios termios;
+	return tcgetattr(fildes, &termios) + 1;
 }
 
 int gethostname(char* name, size_t namelen)
@@ -444,13 +445,15 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 		fclose(fp);
 		return -1;
 	}
-	BAN::ScopeGuard _1([buffer] { free(buffer); });
 
-	buffer = fgets(buffer, buffer_len, fp);
-	fclose(fp);
-
-	if (buffer == nullptr)
+	if (fgets(buffer, buffer_len, fp) == nullptr)
+	{
+		free(buffer);
+		fclose(fp);
 		return -1;
+	}
+
+	fclose(fp);
 
 	const auto sv_trim_whitespace =
 		[](BAN::StringView sv) -> BAN::StringView
@@ -465,6 +468,7 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 	BAN::StringView buffer_sv = buffer;
 	if (buffer_sv.back() != '\n')
 	{
+		free(buffer);
 		errno = ENOEXEC;
 		return -1;
 	}
@@ -481,6 +485,7 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 
 	if (interpreter.empty())
 	{
+		free(buffer);
 		errno = ENOEXEC;
 		return -1;
 	}
@@ -495,10 +500,12 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 		old_argc++;
 
 	const size_t extra_args = 1 + !argument.empty();
-	char** new_argv = static_cast<char**>(malloc((extra_args + old_argc + 1) * sizeof(char*)));;
+	char** new_argv = static_cast<char**>(malloc((extra_args + old_argc + 1) * sizeof(char*)));
 	if (new_argv == nullptr)
+	{
+		free(buffer);
 		return -1;
-	BAN::ScopeGuard _2([new_argv] { free(new_argv); });
+	}
 
 	new_argv[0] = const_cast<char*>(pathname);
 	if (!argument.empty())
@@ -509,7 +516,10 @@ static int exec_impl_shebang(FILE* fp, const char* pathname, char* const* argv, 
 		new_argv[extra_args + i] = argv[i];
 	new_argv[extra_args + old_argc] = nullptr;
 
-	return exec_impl(interpreter.data(), new_argv, envp, true, shebang_depth + 1);
+	int result = exec_impl(interpreter.data(), new_argv, envp, true, shebang_depth + 1);
+	free(new_argv);
+	free(buffer);
+	return result;
 }
 
 static int execl_impl(const char* pathname, const char* arg0, va_list ap, bool has_env, bool do_path_resolution)
@@ -830,7 +840,10 @@ pid_t getsid(pid_t pid)
 
 int tcgetpgrp(int fildes)
 {
-	return syscall(SYS_TCGETPGRP, fildes);
+	pid_t pgrp;
+	if (ioctl(fildes, TIOCGPGRP, &pgrp) == -1)
+		return -1;
+	return pgrp;
 }
 
 int seteuid(uid_t uid)
@@ -881,7 +894,7 @@ int setpgid(pid_t pid, pid_t pgid)
 
 int tcsetpgrp(int fildes, pid_t pgid_id)
 {
-	return syscall(SYS_TCSETPGRP, fildes, pgid_id);
+	return ioctl(fildes, TIOCSPGRP, &pgid_id);
 }
 
 char* getlogin(void)
