@@ -23,13 +23,23 @@ namespace Kernel
 	}
 
 	Pipe::Pipe(const Credentials& credentials)
-		: m_uid(credentials.euid())
-		, m_gid(credentials.egid())
 	{
 		timespec current_time = SystemTimer::get().real_time();
 		m_atime = current_time;
 		m_mtime = current_time;
 		m_ctime = current_time;
+		m_uid = credentials.euid();
+		m_gid = credentials.egid();
+
+		m_ino = 0; // FIXME
+		m_mode = { Mode::IFIFO | Mode::IRUSR | Mode::IWUSR };
+		m_nlink = 1;
+		m_size = 0;
+		m_blksize = 4096;
+		m_blocks = 0;
+		m_dev = 0; // FIXME
+		m_rdev = 0; // FIXME
+		m_kind = InodeKind::PIPE;
 	}
 
 	void Pipe::on_clone(int status_flags)
@@ -131,6 +141,10 @@ namespace Kernel
 		{
 			case TIOCGWINSZ:
 			case TIOCSWINSZ:
+			case TCGETS:
+			case TCSETS:
+			case TCSETSW:
+			case TCSETSF:
 				return BAN::Error::from_errno(EINVAL);
 		}
 		return Inode::ioctl_impl(cmd, arg);

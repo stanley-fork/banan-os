@@ -49,10 +49,6 @@ namespace Kernel
 		void on_key_event(LibInput::KeyEvent);
 		void handle_input_byte(uint8_t);
 
-		virtual bool is_tty() const override { return true; }
-
-		virtual dev_t rdev() const final override { return m_rdev; }
-
 		virtual void clear() = 0;
 
 		virtual BAN::ErrorOr<void> chmod_impl(mode_t) override;
@@ -84,8 +80,6 @@ namespace Kernel
 		termios get_termios();
 
 	private:
-		const dev_t m_rdev;
-
 		BAN::Atomic<pid_t> m_foreground_pgrp { 0 };
 
 		struct tty_ctrl_t

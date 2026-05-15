@@ -12,17 +12,11 @@ namespace Kernel
 		virtual ~Device() = default;
 		virtual void update() {}
 
-		virtual bool is_device() const override { return true; }
-		virtual bool is_partition() const { return false; }
-		virtual bool is_storage_device() const { return false; }
-
 		virtual BAN::ErrorOr<BAN::UniqPtr<MemoryRegion>> mmap_region(PageTable&, off_t offset, size_t len, AddressRange, MemoryRegion::Type, PageTable::flags_t, int status_flags)
 		{
 			(void)offset; (void)len; (void)status_flags;
 			return BAN::Error::from_errno(ENOTSUP);
 		}
-
-		virtual dev_t rdev() const override = 0;
 
 		virtual BAN::StringView name() const = 0;
 
@@ -45,7 +39,7 @@ namespace Kernel
 		BlockDevice(mode_t mode, uid_t uid, gid_t gid)
 			: Device(mode, uid, gid)
 		{
-			m_inode_info.mode |= Inode::Mode::IFBLK;
+			m_mode |= Inode::Mode::IFBLK;
 		}
 	};
 
@@ -55,7 +49,7 @@ namespace Kernel
 		CharacterDevice(mode_t mode, uid_t uid, gid_t gid)
 			: Device(mode, uid, gid)
 		{
-			m_inode_info.mode |= Inode::Mode::IFCHR;
+			m_mode |= Inode::Mode::IFCHR;
 		}
 	};
 

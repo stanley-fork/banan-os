@@ -42,11 +42,6 @@ namespace Kernel
 		char m_label[36 * 4 + 1];
 		const BAN::String m_name;
 
-	public:
-		virtual bool is_partition() const override { return true; }
-
-		virtual dev_t rdev() const override { return m_rdev; }
-
 	protected:
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 
@@ -56,7 +51,6 @@ namespace Kernel
 		virtual bool has_hungup_impl() const override { return false; }
 
 	private:
-		const dev_t m_rdev;
 	};
 
 }
