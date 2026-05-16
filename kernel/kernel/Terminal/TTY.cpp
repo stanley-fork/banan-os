@@ -424,7 +424,7 @@ namespace Kernel
 
 		const auto termios = get_termios();
 
-		SpinLockGuard _1(m_write_lock);
+		LockGuard _(m_write_lock);
 		if (termios.c_oflag & OPOST)
 		{
 			if ((termios.c_oflag & ONLCR) && ch == NL)
@@ -471,15 +471,13 @@ namespace Kernel
 
 	BAN::ErrorOr<size_t> TTY::write_impl(off_t, BAN::ConstByteSpan buffer)
 	{
-		SpinLockGuard write_guard(m_write_lock);
+		LockGuard write_guard(m_write_lock);
 
 		while (!can_write())
 		{
 			if (master_has_closed())
 				return BAN::Error::from_errno(EIO);
-
-			SpinLockGuardAsMutex smutex(write_guard);
-			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &smutex));
+			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &m_write_lock));
 		}
 
 		size_t written = 0;
@@ -497,7 +495,7 @@ namespace Kernel
 	void TTY::putchar_current(uint8_t ch)
 	{
 		ASSERT(s_tty);
-		SpinLockGuard _(s_tty->m_write_lock);
+		LockGuard _(s_tty->m_write_lock);
 		s_tty->putchar(ch);
 		s_tty->after_write();
 	}

@@ -105,7 +105,7 @@ namespace Kernel
 	protected:
 		Mutex m_mutex;
 
-		RecursiveSpinLock m_write_lock;
+		Mutex m_write_lock;
 		ThreadBlocker m_write_blocker;
 	};
 
