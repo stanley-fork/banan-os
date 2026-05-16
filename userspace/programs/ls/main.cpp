@@ -407,7 +407,8 @@ int main(int argc, char* argv[])
 			{ "directory" ,     no_argument, nullptr, 'd' },
 			{ "human-readable", no_argument, nullptr, 'h' },
 			{ "list",           no_argument, nullptr, 'l' },
-			{ "help",           no_argument, nullptr, 'x' },
+			{ "help",           no_argument, nullptr,  0  },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "aAlh", long_options, nullptr);
@@ -431,7 +432,7 @@ int main(int argc, char* argv[])
 			case 'l':
 				config.show_as_list = true;
 				break;
-			case 'x':
+			case 0:
 				fprintf(stderr, "usage: %s [OPTION]... [FILE]...\n", argv[0]);
 				fprintf(stderr, "  list information about FILEs\n");
 				fprintf(stderr, "OPTIONS:\n");
@@ -442,8 +443,7 @@ int main(int argc, char* argv[])
 				fprintf(stderr, "  -l, --list            use long listing format\n");
 				fprintf(stderr, "      --help            show this message and exit\n");
 				return 0;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}

@@ -102,6 +102,7 @@ int main(int argc, char** argv)
 			{ "interactive", no_argument, nullptr, 'i' },
 			{ "force",       no_argument, nullptr, 'f' },
 			{ "help",        no_argument, nullptr, 'h' },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "rRifh", long_options, nullptr);
@@ -110,15 +111,6 @@ int main(int argc, char** argv)
 
 		switch (ch)
 		{
-			case 'h':
-				fprintf(stderr, "usage: %s [OPTIONS]... FILE...\n", argv[0]);
-				fprintf(stderr, "  remove each FILE\n");
-				fprintf(stderr, "OPTIONS:\n");
-				fprintf(stderr, "  -r, -R, --recursive  remove directories and their contents recursively\n");
-				fprintf(stderr, "  -i, --interactive    prompt removal for all files\n");
-				fprintf(stderr, "  -f, --force          ignore nonexistent files and never prompt\n");
-				fprintf(stderr, "  -h, --help           show this message and exit\n");
-				return 0;
 			case 'r': case 'R':
 				recursive = true;
 				break;
@@ -130,8 +122,16 @@ int main(int argc, char** argv)
 				force = false;
 				interactive = true;
 				break;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case 'h':
+				fprintf(stderr, "usage: %s [OPTIONS]... FILE...\n", argv[0]);
+				fprintf(stderr, "  remove each FILE\n");
+				fprintf(stderr, "OPTIONS:\n");
+				fprintf(stderr, "  -r, -R, --recursive  remove directories and their contents recursively\n");
+				fprintf(stderr, "  -i, --interactive    prompt removal for all files\n");
+				fprintf(stderr, "  -f, --force          ignore nonexistent files and never prompt\n");
+				fprintf(stderr, "  -h, --help           show this message and exit\n");
+				return 0;
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}
@@ -139,7 +139,8 @@ int main(int argc, char** argv)
 
 	if (optind >= argc && !force)
 	{
-		fprintf(stderr, "missing operand. use --help for more information\n");
+		fprintf(stderr, "%s: missing operand\n", argv[0]);
+		fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 		return 1;
 	}
 

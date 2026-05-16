@@ -11,6 +11,7 @@ int main(int argc, char* argv[])
 		static option long_options[] {
 			{ "zero", no_argument, nullptr, 'z' },
 			{ "help", no_argument, nullptr, 'h' },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "zh", long_options, nullptr);
@@ -29,8 +30,7 @@ int main(int argc, char* argv[])
 				fprintf(stderr, "  -z, --zero  end each output with NUL instead of a newline\n");
 				fprintf(stderr, "  -h, --help  show this message and exit\n");
 				return 0;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 
 	if (optind >= argc)
 	{
-		fprintf(stderr, "missing operand\n");
+		fprintf(stderr, "%s: missing operand\n", argv[0]);
 		fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 		return 1;
 	}
