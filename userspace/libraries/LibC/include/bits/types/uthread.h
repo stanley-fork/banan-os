@@ -8,7 +8,9 @@ __BEGIN_DECLS
 #define __need_size_t
 #include <sys/types.h>
 
+#include <bits/types/pthread_key_t.h>
 #include <bits/types/pthread_t.h>
+#include <limits.h>
 #include <stdint.h>
 
 typedef struct _pthread_cleanup_t
@@ -44,6 +46,8 @@ struct uthread
 	int cancel_type;
 	int cancel_state;
 	volatile int canceled;
+	pthread_key_t specific_keys[PTHREAD_KEYS_MAX];
+	void* specific_values[PTHREAD_KEYS_MAX];
 	// FIXME: make this dynamic
 	uintptr_t dtv[1 + 256];
 };

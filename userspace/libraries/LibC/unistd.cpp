@@ -112,6 +112,8 @@ extern "C" void _init_libc(char** environ, init_funcs_t init_funcs, init_funcs_t
 			.cancel_type = PTHREAD_CANCEL_DEFERRED,
 			.cancel_state = PTHREAD_CANCEL_ENABLE,
 			.canceled = false,
+			.specific_keys = {},
+			.specific_values = {},
 			.dtv = { 0 },
 		};
 

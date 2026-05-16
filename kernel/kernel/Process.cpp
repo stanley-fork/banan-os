@@ -439,6 +439,8 @@ namespace Kernel
 			.cancel_type = 0,
 			.cancel_state = 0,
 			.canceled = 0,
+			.specific_keys = {},
+			.specific_values = {},
 			.dtv = { 0, region->vaddr() }
 		};
 

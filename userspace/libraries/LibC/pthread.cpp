@@ -137,12 +137,6 @@ void pthread_cleanup_push(void (*routine)(void*), void* arg)
 	uthread->cleanup_stack = cleanup;
 }
 
-static thread_local struct
-{
-	void* value;
-	pthread_key_t key;
-} s_pthread_key_values[PTHREAD_KEYS_MAX] {};
-
 static pthread_key_t s_pthread_key_current = 1;
 static pthread_key_t s_pthread_key_map[PTHREAD_KEYS_MAX] {};
 static void (*s_pthread_key_destructors[PTHREAD_KEYS_MAX])(void*) {};
@@ -190,17 +184,19 @@ void* pthread_getspecific(pthread_key_t key)
 {
 	void* ret = nullptr;
 
+	auto* uthread = _get_uthread();
+
 	pthread_spin_lock(&s_pthread_key_lock);
 	for (size_t i = 0; i < PTHREAD_KEYS_MAX; i++)
 	{
 		if (s_pthread_key_map[i] != key)
 			continue;
-		if (s_pthread_key_values[i].key != key)
+		if (uthread->specific_keys[i] != key)
 		{
-			s_pthread_key_values[i].key = key;
-			s_pthread_key_values[i].value = nullptr;
+			uthread->specific_keys[i] = key;
+			uthread->specific_values[i] = nullptr;
 		}
-		ret = s_pthread_key_values[i].value;
+		ret = uthread->specific_values[i];
 		break;
 	}
 	pthread_spin_unlock(&s_pthread_key_lock);
@@ -212,14 +208,16 @@ int pthread_setspecific(pthread_key_t key, const void* value)
 {
 	int ret = EINVAL;
 
+	auto* uthread = _get_uthread();
+
 	pthread_spin_lock(&s_pthread_key_lock);
 	for (size_t i = 0; i < PTHREAD_KEYS_MAX; i++)
 	{
 		if (s_pthread_key_map[i] != key)
 			continue;
-		if (s_pthread_key_values[i].key != key)
-			s_pthread_key_values[i].key = key;
-		s_pthread_key_values[i].value = const_cast<void*>(value);
+		if (uthread->specific_keys[i] != key)
+			uthread->specific_keys[i] = key;
+		uthread->specific_values[i] = const_cast<void*>(value);
 		ret = 0;
 		break;
 	}
@@ -419,6 +417,8 @@ int pthread_create(pthread_t* __restrict thread_id, const pthread_attr_t* __rest
 			.cancel_type = PTHREAD_CANCEL_DEFERRED,
 			.cancel_state = PTHREAD_CANCEL_ENABLE,
 			.canceled = 0,
+			.specific_keys = {},
+			.specific_values = {},
 			.dtv = { self->dtv[0] }
 		};
 
@@ -468,10 +468,11 @@ void pthread_exit(void* value_ptr)
 			void* value = nullptr;
 
 			pthread_spin_lock(&s_pthread_key_lock);
-			if (s_pthread_key_map[i] && s_pthread_key_values[i].key == s_pthread_key_map[i])
+			if (s_pthread_key_map[i] && uthread->specific_keys[i] == s_pthread_key_map[i])
 			{
 				destructor = s_pthread_key_destructors[i];
-				value = s_pthread_key_values[i].value;
+				value = uthread->specific_values[i];
+				uthread->specific_values[i] = nullptr;
 			}
 			pthread_spin_unlock(&s_pthread_key_lock);
 

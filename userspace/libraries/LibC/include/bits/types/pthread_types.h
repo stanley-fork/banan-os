@@ -8,13 +8,12 @@
 __BEGIN_DECLS
 
 #include <bits/types/pthread_attr_t.h>
+#include <bits/types/pthread_key_t.h>
 #include <bits/types/pthread_t.h>
 
 #include <stdint.h>
 
 typedef int pthread_once_t;
-
-typedef unsigned pthread_key_t;
 
 typedef pthread_t pthread_spinlock_t;
 
