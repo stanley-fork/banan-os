@@ -3884,6 +3884,8 @@ namespace Kernel
 				region->pin();
 				return region.ptr();
 			}
+
+			return BAN::Error::from_errno(EFAULT);
 		}
 
 	validate_and_pin_pointer_access_with_allocation:
