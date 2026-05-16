@@ -270,7 +270,7 @@ long syscall(long syscall, ...)
 
 	return _syscall(syscall, arg1, arg2, arg3, arg4, arg5);
 }
-#define syscall _syscall
+#define syscall(...) _syscall(__VA_ARGS__)
 
 int close(int fd)
 {

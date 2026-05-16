@@ -612,16 +612,17 @@ long syscall(long syscall, ...);
 #include <kernel/API/Syscall.h>
 #include <errno.h>
 #define _syscall(...) ({ \
-		long _ret = -ERESTART; \
-		while (_ret == -ERESTART) \
+		long _ret; \
+		do { \
 			_ret = _kas_syscall(__VA_ARGS__); \
-		if (_ret < 0) { \
+		} while (__builtin_expect(_ret == -ERESTART, 0)); \
+		if (__builtin_expect(_ret < 0, 0)) { \
 			errno = -_ret; \
 			_ret = -1; \
 		} \
 		_ret; \
 	})
-#define syscall _syscall
+#define syscall(...) _syscall(__VA_ARGS__)
 #endif
 
 extern char** environ;
