@@ -100,8 +100,8 @@ namespace Kernel
 
 		BAN::ErrorOr<long> open_inode(VirtualFileSystem::File&&, int flags);
 
-		BAN::ErrorOr<void> create_file_or_dir(int fd, const char* path, mode_t mode) const;
-		BAN::ErrorOr<long> sys_openat(int, const char* path, int, mode_t);
+		BAN::ErrorOr<void> create_file(int fd, const char* path, mode_t) const;
+		BAN::ErrorOr<long> sys_openat(int fd, const char* path, int flags, mode_t);
 		BAN::ErrorOr<long> sys_close(int fd);
 		BAN::ErrorOr<long> sys_read(int fd, void* buffer, size_t count);
 		BAN::ErrorOr<long> sys_write(int fd, const void* buffer, size_t count);

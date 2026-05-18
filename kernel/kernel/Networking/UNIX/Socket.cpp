@@ -31,8 +31,10 @@ namespace Kernel
 			return BAN::Error::from_errno(EINVAL);
 
 		size_t length = 0;
-		while (length < address_len - sizeof(sa_family_t) && sockaddr_un.sun_path[length])
+		while (length < sizeof(sockaddr_un::sun_path) && sockaddr_un.sun_path[length])
 			length++;
+		if (length >= sizeof(sockaddr_un::sun_path))
+			return BAN::Error::from_errno(ENAMETOOLONG);
 
 		return BAN::StringView { sockaddr_un.sun_path, length };
 	}
@@ -269,7 +271,7 @@ namespace Kernel
 		auto parent_file = sun_path.front() == '/'
 			? TRY(Process::current().root_file().clone())
 			: TRY(Process::current().working_directory().clone());
-		if (auto ret = Process::current().create_file_or_dir(AT_FDCWD, sun_path.data(), 0755 | S_IFSOCK); ret.is_error())
+		if (auto ret = Process::current().create_file(AT_FDCWD, sun_path.data(), 0755 | Inode::Mode::IFSOCK); ret.is_error())
 		{
 			if (ret.error().get_error_code() == EEXIST)
 				return BAN::Error::from_errno(EADDRINUSE);

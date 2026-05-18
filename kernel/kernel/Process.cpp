@@ -1163,26 +1163,27 @@ namespace Kernel
 		}
 	}
 
-	BAN::ErrorOr<void> Process::create_file_or_dir(int fd, const char* path, mode_t mode) const
+	BAN::ErrorOr<void> Process::create_file(int fd, const char* path, mode_t mode) const
 	{
 		switch (mode & Inode::Mode::TYPE_MASK)
 		{
 			case Inode::Mode::IFREG:
-			case Inode::Mode::IFDIR:
 			case Inode::Mode::IFLNK:
 			case Inode::Mode::IFIFO:
 			case Inode::Mode::IFSOCK:
 				break;
 			default:
-				return BAN::Error::from_errno(ENOTSUP);
+				ASSERT_NOT_REACHED();
 		}
 
-		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_EXEC | O_WRONLY));
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
+			LockGuard _(m_process_lock);
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
 
-		if (Inode::Mode(mode).ifdir())
-			TRY(parent.inode->create_directory(file_name, mode, m_credentials.euid(), parent.inode->gid()));
-		else
-			TRY(parent.inode->create_file(file_name, mode, m_credentials.euid(), parent.inode->gid()));
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_EXEC | O_WRONLY));
+		TRY(parent.inode->create_file(file_name, mode, uid, gid));
 
 		return {};
 	}
@@ -1306,14 +1307,11 @@ namespace Kernel
 		char path[PATH_MAX];
 		TRY(read_string_from_user(user_path, path, PATH_MAX));
 
-		uid_t uid;
-		gid_t gid;
-
-		{
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
 			LockGuard _(m_process_lock);
-			uid = m_credentials.euid();
-			gid = m_credentials.egid();
-		}
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
 
 		auto [parent, file_name] = TRY(find_parent_file(AT_FDCWD, path, O_WRONLY));
 		TRY(parent.inode->create_directory(file_name, (mode & 0777) | Inode::Mode::IFDIR, uid, gid));
@@ -1376,7 +1374,6 @@ namespace Kernel
 		if (user_path != nullptr)
 			TRY(read_string_from_user(user_path, path, PATH_MAX));
 
-
 		auto [parent, file_name] = TRY(find_parent_file(fd, user_path ? path : nullptr, O_WRONLY));
 
 		const auto inode = TRY(parent.inode->find_inode(file_name));
@@ -1421,10 +1418,7 @@ namespace Kernel
 		if (user_path2 != nullptr)
 			TRY(read_string_from_user(user_path2, path2, PATH_MAX));
 
-		if (!find_file(fd, user_path2 ? path2 : nullptr, O_NOFOLLOW).is_error())
-			return BAN::Error::from_errno(EEXIST);
-
-		TRY(create_file_or_dir(fd, user_path2 ? path2 : nullptr, 0777 | Inode::Mode::IFLNK));
+		TRY(create_file(fd, user_path2 ? path2 : nullptr, 0777 | Inode::Mode::IFLNK));
 
 		auto symlink = TRY(find_file(fd, user_path2 ? path2 : nullptr, O_NOFOLLOW));
 		TRY(symlink.inode->set_link_target(path1));
