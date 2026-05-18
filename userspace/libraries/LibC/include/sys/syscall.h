@@ -52,7 +52,8 @@ __BEGIN_DECLS
 	O(SYS_TTY_CTRL,			tty_ctrl)		\
 	O(SYS_POWEROFF,			poweroff)		\
 	O(SYS_FCHMODAT,			fchmodat)		\
-	O(SYS_CREATE_DIR,		create_dir)		\
+	O(SYS_MKDIRAT,			mkdirat)		\
+	O(SYS_MKFIFOAT,			mkfifoat)		\
 	O(SYS_UNLINKAT,			unlinkat) 		\
 	O(SYS_READLINKAT,		readlinkat)		\
 	O(SYS_MSYNC,			msync)			\

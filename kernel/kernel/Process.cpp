@@ -1302,7 +1302,7 @@ namespace Kernel
 		return 0;
 	}
 
-	BAN::ErrorOr<long> Process::sys_create_dir(const char* user_path, mode_t mode)
+	BAN::ErrorOr<long> Process::sys_mkdirat(int fd, const char* user_path, mode_t mode)
 	{
 		char path[PATH_MAX];
 		TRY(read_string_from_user(user_path, path, PATH_MAX));
@@ -1313,8 +1313,25 @@ namespace Kernel
 			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
 		});
 
-		auto [parent, file_name] = TRY(find_parent_file(AT_FDCWD, path, O_WRONLY));
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_WRONLY));
 		TRY(parent.inode->create_directory(file_name, (mode & 0777) | Inode::Mode::IFDIR, uid, gid));
+
+		return 0;
+	}
+
+	BAN::ErrorOr<long> Process::sys_mkfifoat(int fd, const char* user_path, mode_t mode)
+	{
+		char path[PATH_MAX];
+		TRY(read_string_from_user(user_path, path, PATH_MAX));
+
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
+			LockGuard _(m_process_lock);
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
+
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_WRONLY));
+		TRY(parent.inode->create_file(file_name, (mode & 0777) | Inode::Mode::IFIFO, uid, gid));
 
 		return 0;
 	}
@@ -1415,12 +1432,11 @@ namespace Kernel
 		TRY(read_string_from_user(user_path1, path1, PATH_MAX));
 
 		char path2[PATH_MAX];
-		if (user_path2 != nullptr)
-			TRY(read_string_from_user(user_path2, path2, PATH_MAX));
+		TRY(read_string_from_user(user_path2, path2, PATH_MAX));
 
-		TRY(create_file(fd, user_path2 ? path2 : nullptr, 0777 | Inode::Mode::IFLNK));
+		TRY(create_file(fd, path2, 0777 | Inode::Mode::IFLNK));
 
-		auto symlink = TRY(find_file(fd, user_path2 ? path2 : nullptr, O_NOFOLLOW));
+		auto symlink = TRY(find_file(fd, path2, O_NOFOLLOW));
 		TRY(symlink.inode->set_link_target(path1));
 
 		return 0;
