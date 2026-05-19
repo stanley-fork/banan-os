@@ -278,6 +278,8 @@ namespace Kernel
 		// You must hold reader end of m_mapped_region_lock when calling this.
 		size_t find_mapped_region(vaddr_t) const;
 
+		BAN::ErrorOr<AddressRange> find_free_address_range(size_t size);
+
 		BAN::ErrorOr<VirtualFileSystem::File> find_file(int fd, const char* path, int flags) const;
 		BAN::ErrorOr<FileParent> find_parent_file(int fd, const char* path, int flags) const;
 		BAN::ErrorOr<VirtualFileSystem::File> find_relative_parent(int fd, const char* path) const;

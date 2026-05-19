@@ -483,6 +483,26 @@ namespace Kernel
 		return l;
 	}
 
+	BAN::ErrorOr<AddressRange> Process::find_free_address_range(size_t size)
+	{
+		if (auto rem = size % PAGE_SIZE)
+			size += PAGE_SIZE - rem;
+
+		vaddr_t vaddr = m_shared_page_vaddr ? m_shared_page_vaddr + PAGE_SIZE : 0x400000;
+		for (size_t i = find_mapped_region(vaddr); i < m_mapped_regions.size(); i++)
+		{
+			const auto& region = m_mapped_regions[i];
+			if (!region->overlaps(vaddr, size))
+				return AddressRange { vaddr, vaddr + size };
+
+			vaddr = region->vaddr() + region->size();
+			if (auto rem = vaddr % PAGE_SIZE)
+				vaddr += PAGE_SIZE - rem;
+		}
+
+		return BAN::Error::from_errno(ENOMEM);
+	}
+
 	size_t Process::proc_meminfo(off_t offset, BAN::ByteSpan buffer) const
 	{
 		ASSERT(offset >= 0);
@@ -2470,7 +2490,7 @@ namespace Kernel
 
 		RWLockWRGuard _(m_memory_region_lock);
 
-		AddressRange address_range { .start = 0x400000, .end = USERSPACE_END };
+		AddressRange address_range;
 		if (args.flags & (MAP_FIXED | MAP_FIXED_NOREPLACE))
 		{
 			const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr);
@@ -2509,22 +2529,30 @@ namespace Kernel
 				}
 			}
 		}
-		else if (const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr); vaddr == 0)
-			;
-		else if (vaddr % PAGE_SIZE)
-			;
-		else if (!PageTable::is_valid_pointer(vaddr))
-			;
-		else if (!PageTable::is_valid_pointer(vaddr + args.len))
-			;
-		else if (!page_table().is_range_free(vaddr, args.len))
-			;
 		else
 		{
-			address_range = {
-				.start = vaddr,
-				.end = vaddr + args.len,
-			};
+			bool use_address_hint = false;
+
+			const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr);
+			if (vaddr == 0 || vaddr % PAGE_SIZE)
+				;
+			else if (!PageTable::is_valid_pointer(vaddr))
+				;
+			else if (!PageTable::is_valid_pointer(vaddr + args.len))
+				;
+			else if (!page_table().is_range_free(vaddr, args.len))
+				;
+			else
+			{
+				use_address_hint = true;
+				address_range = {
+					.start = vaddr,
+					.end = vaddr + args.len,
+				};
+			}
+
+			if (!use_address_hint)
+				address_range = TRY(find_free_address_range(args.len));
 		}
 
 		if (args.flags & MAP_ANONYMOUS)
