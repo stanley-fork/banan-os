@@ -21,8 +21,8 @@ namespace Kernel
 		const size_t bitmap_page_count = BAN::Math::div_round_up<size_t>(m_page_count, bits_per_page);
 		for (size_t i = 0; i < bitmap_page_count; i++)
 		{
-			PageTable::with_fast_page(paddr + i * PAGE_SIZE, [] {
-				memset(PageTable::fast_page_as_ptr(), 0, PAGE_SIZE);
+			PageTable::with_per_cpu_fast_page(paddr + i * PAGE_SIZE, [](void* addr) {
+				memset(addr, 0, PAGE_SIZE);
 			});
 		}
 
@@ -40,15 +40,15 @@ namespace Kernel
 			BAN::Optional<size_t> page_matched_bit;
 
 			const paddr_t current_paddr = m_paddr + i * PAGE_SIZE;
-			PageTable::with_fast_page(current_paddr, [&page_matched_bit] {
+			PageTable::with_per_cpu_fast_page(current_paddr, [&page_matched_bit](void* addr) {
 				for (size_t j = 0; j < PAGE_SIZE / sizeof(size_t); j++)
 				{
 					static_assert(sizeof(size_t) == sizeof(long));
-					const size_t current = PageTable::fast_page_as_sized<volatile size_t>(j);
+					auto& current = static_cast<size_t*>(addr)[j];
 					if (current == BAN::numeric_limits<size_t>::max())
 						continue;
 					const int ctz = __builtin_ctzl(~current);
-					PageTable::fast_page_as_sized<volatile size_t>(j) = current | (static_cast<size_t>(1) << ctz);
+					current |= static_cast<size_t>(1) << ctz;
 					page_matched_bit = j * sizeof(size_t) * 8 + ctz;
 					return;
 				}
@@ -75,15 +75,14 @@ namespace Kernel
 
 		const size_t paddr_index = (paddr - m_paddr) / PAGE_SIZE;
 
-		PageTable::with_fast_page(m_paddr + paddr_index / bits_per_page * PAGE_SIZE, [paddr_index] {
+		PageTable::with_per_cpu_fast_page(m_paddr + paddr_index / bits_per_page * PAGE_SIZE, [paddr_index] (void* addr) {
 			const size_t bitmap_bit = paddr_index % bits_per_page;
 			const size_t byte       = bitmap_bit / 8;
 			const size_t bit        = bitmap_bit % 8;
 
-			volatile uint8_t& bitmap_byte = PageTable::fast_page_as_sized<volatile uint8_t>(byte);
+			uint8_t& bitmap_byte = static_cast<uint8_t*>(addr)[byte];
 			ASSERT(bitmap_byte & (1u << bit));
-
-			bitmap_byte = bitmap_byte & ~(1u << bit);
+			bitmap_byte &= ~(1u << bit);
 		});
 
 		m_free_pages++;
@@ -103,8 +102,8 @@ namespace Kernel
 				const size_t bit  = bit_index % 8;
 
 				uint8_t current;
-				PageTable::with_fast_page(m_paddr + page_index * PAGE_SIZE, [&current, byte] {
-					current = PageTable::fast_page_as_sized<volatile uint8_t>(byte);
+				PageTable::with_per_cpu_fast_page(m_paddr + page_index * PAGE_SIZE, [&current, byte](void* addr) {
+					current = static_cast<uint8_t*>(addr)[byte];
 				});
 
 				return current & (1u << bit);
@@ -117,9 +116,9 @@ namespace Kernel
 				const size_t bit_index  = buffer_bit % bits_per_page;
 				const size_t byte = bit_index / 8;
 				const size_t bit  = bit_index % 8;
-				PageTable::with_fast_page(m_paddr + page_index * PAGE_SIZE, [byte, bit] {
-					volatile uint8_t& current = PageTable::fast_page_as_sized<volatile uint8_t>(byte);
-					current = current | (1u << bit);
+				PageTable::with_per_cpu_fast_page(m_paddr + page_index * PAGE_SIZE, [byte, bit](void* addr) {
+					uint8_t& current = static_cast<uint8_t*>(addr)[byte];
+					current |= 1u << bit;
 				});
 			};
 
