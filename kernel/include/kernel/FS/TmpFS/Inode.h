@@ -26,18 +26,14 @@ namespace Kernel
 	{
 	public:
 		static BAN::ErrorOr<BAN::RefPtr<TmpInode>> create_from_existing(TmpFileSystem&, ino_t, const TmpInodeInfo&);
-		~TmpInode();
+		virtual ~TmpInode();
 
 		virtual const FileSystem* filesystem() const override;
 
 	protected:
 		TmpInode(TmpFileSystem&, ino_t, const TmpInodeInfo&);
-		virtual BAN::ErrorOr<void> chmod_impl(mode_t) override;
-		virtual BAN::ErrorOr<void> chown_impl(uid_t, gid_t) override;
-		virtual BAN::ErrorOr<void> utimens_impl(const timespec[2]) override;
-		virtual BAN::ErrorOr<void> fsync_impl() override { return {}; }
 
-		void sync();
+		void write_inode_to_fs();
 		virtual BAN::ErrorOr<void> prepare_unlink_no_lock() { return {}; };
 
 		void free_all_blocks();
@@ -48,6 +44,10 @@ namespace Kernel
 
 		BAN::ErrorOr<size_t> block_index_with_allocation(size_t data_block_index);
 		BAN::ErrorOr<size_t> block_index_from_indirect_with_allocation_no_lock(size_t& block, size_t index, uint32_t depth);
+
+	private:
+		BAN::ErrorOr<void> sync_inode(SyncType) override;
+		BAN::ErrorOr<void> sync_data() override;
 
 	protected:
 		TmpFileSystem& m_fs;
@@ -66,7 +66,7 @@ namespace Kernel
 		static BAN::ErrorOr<BAN::RefPtr<TmpFileInode>> create_new(TmpFileSystem&, mode_t, uid_t, gid_t);
 		~TmpFileInode();
 
-	protected:
+	private:
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
 		virtual BAN::ErrorOr<void> truncate_impl(size_t) override;
@@ -89,7 +89,7 @@ namespace Kernel
 		static BAN::ErrorOr<BAN::RefPtr<TmpFIFOInode>> create_new(TmpFileSystem&, mode_t, uid_t, gid_t);
 		~TmpFIFOInode();
 
-	protected:
+	private:
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override { return BAN::Error::from_errno(ENODEV); }
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override { return BAN::Error::from_errno(ENODEV); }
 		virtual BAN::ErrorOr<void> truncate_impl(size_t) override { return BAN::Error::from_errno(ENODEV); }
@@ -111,7 +111,7 @@ namespace Kernel
 		static BAN::ErrorOr<BAN::RefPtr<TmpSocketInode>> create_new(TmpFileSystem&, mode_t, uid_t, gid_t);
 		~TmpSocketInode();
 
-	protected:
+	private:
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override { return BAN::Error::from_errno(ENODEV); }
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override { return BAN::Error::from_errno(ENODEV); }
 		virtual BAN::ErrorOr<void> truncate_impl(size_t) override { return BAN::Error::from_errno(ENODEV); }
@@ -133,7 +133,7 @@ namespace Kernel
 		static BAN::ErrorOr<BAN::RefPtr<TmpSymlinkInode>> create_new(TmpFileSystem&, mode_t, uid_t, gid_t, BAN::StringView target);
 		~TmpSymlinkInode();
 
-	protected:
+	private:
 		BAN::ErrorOr<BAN::String> link_target_impl() override;
 		BAN::ErrorOr<void> set_link_target_impl(BAN::StringView) override;
 

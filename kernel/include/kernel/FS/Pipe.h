@@ -10,7 +10,7 @@
 namespace Kernel
 {
 
-	class Pipe : public Inode, public BAN::Weakable<Pipe>
+	class Pipe final : public Inode, public BAN::Weakable<Pipe>
 	{
 	public:
 		static BAN::ErrorOr<BAN::RefPtr<Inode>> open(BAN::RefPtr<Inode>, int status_flags);
@@ -22,10 +22,13 @@ namespace Kernel
 
 		virtual const FileSystem* filesystem() const override { return nullptr; }
 
-	protected:
+	private:
+		virtual BAN::ErrorOr<void> sync_inode(SyncType) override;
+		virtual BAN::ErrorOr<void> sync_data() override;
+
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
-		virtual BAN::ErrorOr<void> fsync_impl() final override { return {}; }
+		virtual BAN::ErrorOr<void> truncate_impl(size_t) override;
 
 		virtual bool can_read_impl() const override { return !m_buffer->empty(); }
 		virtual bool can_write_impl() const override { return true; }

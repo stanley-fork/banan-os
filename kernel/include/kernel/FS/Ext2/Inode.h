@@ -16,25 +16,12 @@ namespace Kernel
 	public:
 		~Ext2Inode();
 
-#if 0
-		virtual ino_t ino() const override { return m_ino; };
-		virtual Mode mode() const override { return { m_inode.mode }; }
-		virtual nlink_t nlink() const override { return m_inode.links_count; }
-		virtual uid_t uid() const override { return m_inode.uid; }
-		virtual gid_t gid() const override { return m_inode.gid; }
-		virtual off_t size() const override { return m_inode.size; }
-		virtual timespec atime() const override { return timespec { .tv_sec = m_inode.atime, .tv_nsec = 0 }; }
-		virtual timespec mtime() const override { return timespec { .tv_sec = m_inode.mtime, .tv_nsec = 0 }; }
-		virtual timespec ctime() const override { return timespec { .tv_sec = m_inode.ctime, .tv_nsec = 0 }; }
-		virtual blksize_t blksize() const override;
-		virtual blkcnt_t blocks() const override;
-		virtual dev_t dev() const override { return 0; }
-		virtual dev_t rdev() const override { return 0; }
-#endif
-
 		virtual const FileSystem* filesystem() const override;
 
-	protected:
+	private:
+		virtual BAN::ErrorOr<void> sync_inode(SyncType) override;
+		virtual BAN::ErrorOr<void> sync_data() override;
+
 		virtual BAN::ErrorOr<BAN::RefPtr<Inode>> find_inode_impl(BAN::StringView) override;
 		virtual BAN::ErrorOr<size_t> list_next_inodes_impl(off_t, struct dirent*, size_t) override;
 		virtual BAN::ErrorOr<void> create_file_impl(BAN::StringView, mode_t, uid_t, gid_t) override;
@@ -49,10 +36,6 @@ namespace Kernel
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
 		virtual BAN::ErrorOr<void> truncate_impl(size_t) override;
-		virtual BAN::ErrorOr<void> chmod_impl(mode_t) override;
-		virtual BAN::ErrorOr<void> chown_impl(uid_t, gid_t) override;
-		virtual BAN::ErrorOr<void> utimens_impl(const timespec[2]) override;
-		virtual BAN::ErrorOr<void> fsync_impl() override;
 
 		virtual bool can_read_impl() const override { return true; }
 		virtual bool can_write_impl() const override { return true; }
@@ -66,7 +49,7 @@ namespace Kernel
 		// NOTE: the inode might have more blocks than what this suggests if it has been shrinked
 		uint32_t max_used_data_block_count() const { return size() / blksize(); }
 
-		BAN::ErrorOr<void> sync_no_lock();
+		BAN::ErrorOr<void> sync_inode_no_lock();
 
 		BAN::ErrorOr<bool> is_directory_empty_no_lock();
 		BAN::ErrorOr<BAN::RefPtr<Inode>> find_inode_no_lock(BAN::StringView);
@@ -101,7 +84,7 @@ namespace Kernel
 			{
 				// TODO: there was some memcmp smarty pants stuff here.
 				// How do we wanna approach it?
-				if (auto ret = inode.sync_no_lock(); ret.is_error())
+				if (auto ret = inode.sync_inode_no_lock(); ret.is_error())
 					dwarnln("failed to sync inode: {}", ret.error());
 			}
 

@@ -40,9 +40,9 @@ namespace Kernel
 			m_gid = info.gid;
 		}
 
-		BAN::ErrorOr<void> fsync_impl() final override { return {}; }
-
 	private:
+		BAN::ErrorOr<void> sync_inode(SyncType) final override { return {}; }
+		BAN::ErrorOr<void> sync_data() final override { return {}; }
 	};
 
 }

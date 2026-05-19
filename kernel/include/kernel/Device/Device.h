@@ -23,7 +23,9 @@ namespace Kernel
 	protected:
 		Device(mode_t, uid_t, gid_t);
 
-		virtual BAN::ErrorOr<void> fsync_impl() final override { return BAN::Error::from_errno(EINVAL); }
+	private:
+		BAN::ErrorOr<void> sync_inode(SyncType) final override { return {}; }
+		BAN::ErrorOr<void> sync_data()          final override { return {}; }
 	};
 
 	class BlockDevice : public Device, public BAN::Weakable<BlockDevice>

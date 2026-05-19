@@ -173,6 +173,44 @@ namespace Kernel
 		m_thread_blocker.unblock();
 	}
 
+	BAN::ErrorOr<void> Pipe::sync_inode(SyncType type)
+	{
+		if (!m_named_inode)
+			return {};
+
+		switch (type)
+		{
+			case SyncType::General:
+				break;
+			case SyncType::Mode:
+				TRY(m_named_inode->chmod(m_mode));
+				break;
+			case SyncType::UidGid:
+				TRY(m_named_inode->chown(m_uid, m_gid));
+				break;
+			case SyncType::Times:
+				const timespec times[] { m_atime, m_mtime };
+				TRY(m_named_inode->utimens(times));
+				break;
+		}
+
+		m_mode = m_named_inode->mode().mode;
+
+		m_uid = m_named_inode->uid();
+		m_gid = m_named_inode->gid();
+
+		m_atime = m_named_inode->atime();
+		m_mtime = m_named_inode->mtime();
+		m_ctime = m_named_inode->ctime();
+
+		return {};
+	}
+
+	BAN::ErrorOr<void> Pipe::sync_data()
+	{
+		return {};
+	}
+
 	BAN::ErrorOr<size_t> Pipe::read_impl(off_t, BAN::ByteSpan buffer)
 	{
 		LockGuard _(m_mutex);
@@ -225,6 +263,10 @@ namespace Kernel
 		return to_copy;
 	}
 
+	BAN::ErrorOr<void> Pipe::truncate_impl(size_t)
+	{
+		return BAN::Error::from_errno(ENODEV);
+	}
 
 	BAN::ErrorOr<long> Pipe::ioctl_impl(int cmd, void* arg)
 	{

@@ -19,7 +19,10 @@ namespace Kernel
 
 		const FAT::DirectoryEntry& entry() const { return m_entry; }
 
-	protected:
+	private:
+		virtual BAN::ErrorOr<void> sync_inode(SyncType) override { return {}; }
+		virtual BAN::ErrorOr<void> sync_data() override { return {}; }
+
 		virtual BAN::ErrorOr<BAN::RefPtr<Inode>> find_inode_impl(BAN::StringView) override;
 		virtual BAN::ErrorOr<size_t> list_next_inodes_impl(off_t, struct dirent*, size_t) override;
 		//virtual BAN::ErrorOr<void> create_file_impl(BAN::StringView, mode_t, uid_t, gid_t) override;
@@ -29,9 +32,6 @@ namespace Kernel
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		//virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
 		//virtual BAN::ErrorOr<void> truncate_impl(size_t) override;
-		//virtual BAN::ErrorOr<void> chmod_impl(mode_t) override;
-		//virtual BAN::ErrorOr<void> utimens_impl(const timespec[2]) override;
-		virtual BAN::ErrorOr<void> fsync_impl() override { return {}; }
 
 		virtual bool can_read_impl() const override { return true; }
 		virtual bool can_write_impl() const override { return true; }

@@ -155,22 +155,6 @@ namespace Kernel
 		DevFileSystem::get().add_inode("tty", MUST(DevTTY::create(0666, 0, 0)));
 	}
 
-	BAN::ErrorOr<void> TTY::chmod_impl(mode_t mode)
-	{
-		// FIXME: make this atomic
-		ASSERT((mode & Inode::Mode::TYPE_MASK) == 0);
-		m_mode &= Inode::Mode::TYPE_MASK;
-		m_mode |= mode;
-		return {};
-	}
-
-	BAN::ErrorOr<void> TTY::chown_impl(uid_t uid, gid_t gid)
-	{
-		m_uid = uid;
-		m_gid = gid;
-		return {};
-	}
-
 	void TTY::update_winsize(unsigned short cols, unsigned short rows)
 	{
 		// FIXME: make this atomic

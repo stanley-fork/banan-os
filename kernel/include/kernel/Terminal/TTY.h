@@ -51,15 +51,6 @@ namespace Kernel
 
 		virtual void clear() = 0;
 
-		virtual BAN::ErrorOr<void> chmod_impl(mode_t) override;
-		virtual BAN::ErrorOr<void> chown_impl(uid_t, gid_t) override;
-
-		virtual BAN::ErrorOr<long> ioctl_impl(int, void*) override;
-
-		virtual bool can_read_impl() const override { return m_output.flush; }
-		virtual bool has_error_impl() const override { return false; }
-		virtual bool has_hungup_impl() const override { return false; }
-
 		virtual bool master_has_closed() const { return false; }
 
 	protected:
@@ -68,10 +59,16 @@ namespace Kernel
 		virtual bool putchar_impl(uint8_t ch) = 0;
 		virtual void after_write() {}
 
+		void update_winsize(unsigned short cols, unsigned short rows);
+
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) final override;
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) final override;
 
-		void update_winsize(unsigned short cols, unsigned short rows);
+		virtual bool can_read_impl() const override { return m_output.flush; }
+		virtual bool has_error_impl() const override { return false; }
+		virtual bool has_hungup_impl() const override { return false; }
+
+		virtual BAN::ErrorOr<long> ioctl_impl(int, void*) override;
 
 	private:
 		bool putchar(uint8_t ch);

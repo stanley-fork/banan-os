@@ -11,37 +11,21 @@ namespace Kernel
 	public:
 		static BAN::ErrorOr<BAN::RefPtr<Inode>> create(uint64_t initval, bool semaphore);
 
+	private:
+		EventFD(uint64_t initval, bool is_semaphore);
+
 		const FileSystem* filesystem() const override { return nullptr; }
 
-	protected:
+		BAN::ErrorOr<void> sync_inode(SyncType) override { return {}; }
+		BAN::ErrorOr<void> sync_data() override { return {}; }
+
 		BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
-		BAN::ErrorOr<void> fsync_impl() final override { return {}; }
 
 		bool can_read_impl() const override { return m_value > 0; }
 		bool can_write_impl() const override { return m_value < UINT64_MAX - 1; }
 		bool has_error_impl() const override { return false; }
 		bool has_hungup_impl() const override { return false; }
-
-	private:
-		EventFD(uint64_t initval, bool is_semaphore)
-			: m_is_semaphore(is_semaphore)
-			, m_value(initval)
-		{
-			m_ino = 0;
-			m_mode = { Mode::IFCHR | Mode::IRUSR | Mode::IWUSR };
-			m_nlink = 0;
-			m_uid = 0;
-			m_gid = 0;
-			m_size = 0;
-			m_atime = {};
-			m_mtime = {};
-			m_ctime = {};
-			m_blksize = 8;
-			m_blocks = 0;
-			m_dev = 0;
-			m_rdev = 0;
-		}
 
 	private:
 		const bool m_is_semaphore;
