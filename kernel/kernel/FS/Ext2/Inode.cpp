@@ -390,20 +390,18 @@ namespace Kernel
 	{
 		RWLockWRGuard _(m_lock);
 
-		const uint32_t old_times[2] {
-			static_cast<uint32_t>(m_atime.tv_sec),
-			static_cast<uint32_t>(m_mtime.tv_sec),
+		const timespec old_times[2] {
+			m_atime,
+			m_mtime,
 		};
 
-		if (times[0].tv_nsec != UTIME_OMIT)
-			m_atime.tv_sec = times[0].tv_sec;
-		if (times[1].tv_nsec != UTIME_OMIT)
-			m_mtime.tv_sec = times[1].tv_sec;
+		m_atime = times[0];
+		m_mtime = times[1];
 
 		if (auto ret = sync_no_lock(); ret.is_error())
 		{
-			m_atime.tv_sec = old_times[0];
-			m_mtime.tv_sec = old_times[1];
+			m_atime = old_times[0];
+			m_mtime = old_times[1];
 			return ret.release_error();
 		}
 

@@ -1535,11 +1535,7 @@ namespace Kernel
 		if (flag == AT_SYMLINK_NOFOLLOW)
 			flag = O_NOFOLLOW;
 
-		const uint64_t current_ns = SystemTimer::get().ns_since_boot();
-		const timespec current_ts = {
-			.tv_sec = static_cast<time_t>(current_ns / 1'000'000),
-			.tv_nsec = static_cast<long>(current_ns % 1'000'000),
-		};
+		const timespec current_ts = SystemTimer::get().real_time();
 
 		timespec times[2];
 		if (user_times == nullptr)
@@ -1560,7 +1556,6 @@ namespace Kernel
 				else if (times[i].tv_nsec < 0 || times[i].tv_nsec >= 1'000'000'000)
 					return BAN::Error::from_errno(EINVAL);
 			}
-
 		}
 
 		if (times[0].tv_nsec == UTIME_OMIT && times[1].tv_nsec == UTIME_OMIT)
@@ -1580,6 +1575,11 @@ namespace Kernel
 				return BAN::Error::from_errno(EPERM);
 			}
 		}
+
+		if (times[0].tv_nsec == UTIME_OMIT)
+			times[0] = inode->atime();
+		if (times[1].tv_nsec == UTIME_OMIT)
+			times[1] = inode->mtime();
 
 		TRY(inode->utimens(times));
 

@@ -119,10 +119,8 @@ namespace Kernel
 	BAN::ErrorOr<void> TmpInode::utimens_impl(const timespec times[2])
 	{
 		// FIXME: make this atomic
-		if (times[0].tv_nsec != UTIME_OMIT)
-			m_atime = times[0];
-		if (times[1].tv_nsec != UTIME_OMIT)
-			m_atime = times[1];
+		m_atime = times[0];
+		m_mtime = times[1];
 		return {};
 	}
 
