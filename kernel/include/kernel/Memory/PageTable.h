@@ -45,6 +45,8 @@ namespace Kernel
 			WriteThrough,
 		};
 
+		static constexpr bool full_tlb_flush_threshold = 32;
+
 	public:
 		static void initialize_fast_page();
 		static void initialize_and_load();
@@ -133,6 +135,7 @@ namespace Kernel
 
 		void invalidate_page(vaddr_t addr, bool send_smp_message) { invalidate_range(addr, 1, send_smp_message); }
 		void invalidate_range(vaddr_t addr, size_t pages, bool send_smp_message);
+		void invalidate_full_address_space(bool global);
 
 		InterruptState lock() const { return m_lock.lock(); }
 		void unlock(InterruptState state) const { m_lock.unlock(state); }

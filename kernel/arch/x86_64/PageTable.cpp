@@ -24,7 +24,6 @@ namespace Kernel
 	SpinLock PageTable::s_fast_page_lock;
 
 	static constexpr vaddr_t s_hhdm_offset = 0xFFFF800000000000;
-	static bool s_is_initialized = false;
 
 	constexpr uint64_t s_page_flag_mask = 0x8000000000000FFF;
 	constexpr uint64_t s_page_addr_mask = ~s_page_flag_mask;
@@ -470,32 +469,10 @@ namespace Kernel
 		const bool is_userspace = (vaddr < KERNEL_OFFSET);
 		if (is_userspace && this != &PageTable::current())
 			;
-		else if (pages <= 32 || !s_is_initialized)
-		{
-			for (size_t i = 0; i < pages; i++)
-				asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
-		}
-		else if (is_userspace || !s_has_pge)
-		{
-			asm volatile("movq %0, %%cr3" :: "r"(m_highest_paging_struct));
-		}
-		else
-		{
-			asm volatile(
-				"movq %%cr4, %%rax;"
-
-				"andq $~0x80, %%rax;"
-				"movq %%rax, %%cr4;"
-
-				"movq %0, %%cr3;"
-
-				"orq $0x80, %%rax;"
-				"movq %%rax, %%cr4;"
-				:
-				: "r"(m_highest_paging_struct)
-				: "rax"
-			);
-		}
+		else if (pages >= full_tlb_flush_threshold)
+			invalidate_full_address_space(!is_userspace);
+		else for (size_t i = 0; i < pages; i++)
+			asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
 
 		if (send_smp_message)
 		{
@@ -507,6 +484,34 @@ namespace Kernel
 					.page_table = vaddr < KERNEL_OFFSET ? this : nullptr,
 				}
 			});
+		}
+	}
+
+	void PageTable::invalidate_full_address_space(bool global)
+	{
+		if (!global || !s_has_pge)
+		{
+			asm volatile(
+				"movq %%cr3, %%rax;"
+				"movq %%rax, %%cr3;"
+				::: "rax"
+			);
+		}
+		else
+		{
+			asm volatile(
+				"movq %%cr4, %%rax;"
+
+				"andq $~0x80, %%rax;"
+				"movq %%rax, %%cr4;"
+
+				"movq %%cr3, %%rcx;"
+				"movq %%rcx, %%cr3;"
+
+				"orq $0x80, %%rax;"
+				"movq %%rax, %%cr4;"
+				::: "rax", "rcx"
+			);
 		}
 	}
 

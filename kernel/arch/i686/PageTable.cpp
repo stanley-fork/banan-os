@@ -26,8 +26,6 @@ namespace Kernel
 	constexpr uint64_t s_page_flag_mask = 0x8000000000000FFF;
 	constexpr uint64_t s_page_addr_mask = ~s_page_flag_mask;
 
-	static bool s_is_initialized = false;
-
 	static PageTable* s_kernel = nullptr;
 	static bool s_has_nxe = false;
 	static bool s_has_pge = false;
@@ -341,32 +339,10 @@ namespace Kernel
 		const bool is_userspace = (vaddr < KERNEL_OFFSET);
 		if (is_userspace && this != &PageTable::current())
 			;
-		else if (pages <= 32 || !s_is_initialized)
-		{
-			for (size_t i = 0; i < pages; i++)
-				asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
-		}
-		else if (is_userspace || !s_has_pge)
-		{
-			asm volatile("movl %0, %%cr3" :: "r"(static_cast<uint32_t>(m_highest_paging_struct)));
-		}
-		else
-		{
-			asm volatile(
-				"movl %%cr4, %%eax;"
-
-				"andl $~0x80, %%eax;"
-				"movl %%eax, %%cr4;"
-
-				"movl %0, %%cr3;"
-
-				"orl $0x80, %%eax;"
-				"movl %%eax, %%cr4;"
-				:
-				: "r"(static_cast<uint32_t>(m_highest_paging_struct))
-				: "eax"
-			);
-		}
+		else if (pages >= full_tlb_flush_threshold)
+			invalidate_full_address_space(!is_userspace);
+		else for (size_t i = 0; i < pages; i++)
+			asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
 
 		if (send_smp_message)
 		{
@@ -378,6 +354,34 @@ namespace Kernel
 					.page_table = vaddr < KERNEL_OFFSET ? this : nullptr,
 				}
 			});
+		}
+	}
+
+	void PageTable::invalidate_full_address_space(bool global)
+	{
+		if (!global || !s_has_pge)
+		{
+			asm volatile(
+				"movl %%cr3, %%eax;"
+				"movl %%eax, %%cr3;"
+				::: "eax"
+			);
+		}
+		else
+		{
+			asm volatile(
+				"movl %%cr4, %%eax;"
+
+				"andl $~0x80, %%eax;"
+				"movl %%eax, %%cr4;"
+
+				"movl %%cr3, %%ecx;"
+				"movl %%ecx, %%cr3;"
+
+				"orl $0x80, %%eax;"
+				"movl %%eax, %%cr4;"
+				::: "eax", "ecx"
+			);
 		}
 	}
 
