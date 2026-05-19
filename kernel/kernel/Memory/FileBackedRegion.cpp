@@ -97,8 +97,8 @@ namespace Kernel
 			return;
 
 		uint8_t page_buffer[PAGE_SIZE];
-		PageTable::with_fast_page(pages[page_index], [&] {
-			memcpy(page_buffer, PageTable::fast_page_as_ptr(), PAGE_SIZE);
+		PageTable::with_per_cpu_fast_page(pages[page_index], [&](void* addr) {
+			memcpy(page_buffer, addr, PAGE_SIZE);
 		});
 
 		const size_t write_size = BAN::Math::min<size_t>(PAGE_SIZE, inode->size() - page_index * PAGE_SIZE);
@@ -162,8 +162,8 @@ namespace Kernel
 						m_shared_data->pages[shared_page_index] = Heap::get().take_free_page();
 						if (m_shared_data->pages[shared_page_index] == 0)
 							return BAN::Error::from_errno(ENOMEM);
-						PageTable::with_fast_page(m_shared_data->pages[shared_page_index], [&] {
-							memcpy(PageTable::fast_page_as_ptr(), page_buffer, PAGE_SIZE);
+						PageTable::with_per_cpu_fast_page(m_shared_data->pages[shared_page_index], [&](void* addr) {
+							memcpy(addr, page_buffer, PAGE_SIZE);
 						});
 						shared_data_has_correct_page = true;
 					}
@@ -181,12 +181,12 @@ namespace Kernel
 					return BAN::Error::from_errno(ENOMEM);
 				if (!shared_data_has_correct_page)
 				{
-					PageTable::with_fast_page(m_shared_data->pages[shared_page_index], [&] {
-						memcpy(page_buffer, PageTable::fast_page_as_ptr(), PAGE_SIZE);
+					PageTable::with_per_cpu_fast_page(m_shared_data->pages[shared_page_index], [&](void* addr) {
+						memcpy(page_buffer, addr, PAGE_SIZE);
 					});
 				}
-				PageTable::with_fast_page(paddr, [&] {
-					memcpy(PageTable::fast_page_as_ptr(), page_buffer, PAGE_SIZE);
+				PageTable::with_per_cpu_fast_page(paddr, [&](void* addr) {
+					memcpy(addr, page_buffer, PAGE_SIZE);
 				});
 				m_dirty_pages[local_page_index] = paddr;
 				m_page_table.map_page_at(paddr, vaddr, m_flags);
@@ -210,8 +210,8 @@ namespace Kernel
 				return BAN::Error::from_errno(ENOMEM);
 
 			ASSERT(&m_page_table == &PageTable::current());
-			PageTable::with_fast_page(paddr, [vaddr] {
-				memcpy(PageTable::fast_page_as_ptr(), reinterpret_cast<void*>(vaddr), PAGE_SIZE);
+			PageTable::with_per_cpu_fast_page(paddr, [vaddr](void* addr) {
+				memcpy(addr, reinterpret_cast<void*>(vaddr), PAGE_SIZE);
 			});
 
 			m_dirty_pages[local_page_index] = paddr;
@@ -240,8 +240,8 @@ namespace Kernel
 				return BAN::Error::from_errno(ENOMEM);
 
 			ASSERT(&m_page_table == &PageTable::current() || &m_page_table == &PageTable::kernel());
-			PageTable::with_fast_page(paddr, [&] {
-				memcpy(PageTable::fast_page_as_ptr(), reinterpret_cast<void*>(vaddr), PAGE_SIZE);
+			PageTable::with_per_cpu_fast_page(paddr, [&](void* addr) {
+				memcpy(addr, reinterpret_cast<void*>(vaddr), PAGE_SIZE);
 			});
 
 			result->m_page_table.map_page_at(paddr, vaddr, m_flags);
