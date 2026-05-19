@@ -112,6 +112,8 @@ extern "C" void _init_libc(char** environ, init_funcs_t init_funcs, init_funcs_t
 			.cancel_type = PTHREAD_CANCEL_DEFERRED,
 			.cancel_state = PTHREAD_CANCEL_ENABLE,
 			.canceled = false,
+			.specific_keys = {},
+			.specific_values = {},
 			.dtv = { 0 },
 		};
 
@@ -270,7 +272,7 @@ long syscall(long syscall, ...)
 
 	return _syscall(syscall, arg1, arg2, arg3, arg4, arg5);
 }
-#define syscall _syscall
+#define syscall(...) _syscall(__VA_ARGS__)
 
 int close(int fd)
 {

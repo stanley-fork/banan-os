@@ -165,6 +165,7 @@ int main(int argc, char** argv)
 		static option long_options[] {
 			{ "help",      no_argument, nullptr, 'h' },
 			{ "recursive", no_argument, nullptr, 'r' },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "hr", long_options, nullptr);
@@ -173,17 +174,16 @@ int main(int argc, char** argv)
 
 		switch (ch)
 		{
+			case 'r':
+				recursive = true;
+				break;
 			case 'h':
 				printf("usage: %s [OPTIONS]... SOURCE... DEST\n", argv[0]);
 				printf("Copies files SOURCE... to DEST\n");
 				printf("OPTIONS:\n");
 				printf("    -h, --help   Show this message and exit\n");
 				return 0;
-			case 'r':
-				recursive = true;
-				break;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}

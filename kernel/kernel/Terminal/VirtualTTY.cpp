@@ -61,7 +61,7 @@ namespace Kernel
 
 	void VirtualTTY::clear()
 	{
-		SpinLockGuard _(m_write_lock);
+		LockGuard _(m_write_lock);
 		for (uint32_t i = 0; i < m_width * m_height; i++)
 			m_buffer[i] = { .foreground = m_foreground, .background = m_background, .codepoint = ' ' };
 		m_terminal_driver->clear(m_background);
@@ -73,7 +73,7 @@ namespace Kernel
 			return BAN::Error::from_errno(EINVAL);
 
 		{
-			SpinLockGuard _(m_write_lock);
+			LockGuard _(m_write_lock);
 
 			TRY(m_terminal_driver->set_font(BAN::move(font)));
 
@@ -110,7 +110,7 @@ namespace Kernel
 
 	void VirtualTTY::reset_ansi()
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 		m_ansi_state = {
 			.nums = { -1, -1, -1, -1, -1 },
 			.index = 0,
@@ -121,7 +121,7 @@ namespace Kernel
 
 	void VirtualTTY::handle_ansi_csi_color(uint8_t value)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 		switch (value)
 		{
 			case 0:
@@ -201,7 +201,7 @@ namespace Kernel
 
 	void VirtualTTY::handle_ansi_csi(uint8_t ch)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 		switch (ch)
 		{
 			case '0': case '1': case '2': case '3': case '4':
@@ -446,7 +446,7 @@ namespace Kernel
 
 	void VirtualTTY::render_from_buffer(uint32_t x, uint32_t y)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 		ASSERT(x < m_width && y < m_height);
 		const auto& cell = m_buffer[y * m_width + x];
 		m_terminal_driver->putchar_at(cell.codepoint, x, y, cell.foreground, cell.background);
@@ -454,7 +454,7 @@ namespace Kernel
 
 	void VirtualTTY::putchar_at(uint32_t codepoint, uint32_t x, uint32_t y)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 		ASSERT(x < m_width && y < m_height);
 		auto& cell = m_buffer[y * m_width + x];
 		cell.codepoint = codepoint;
@@ -488,7 +488,7 @@ namespace Kernel
 
 	void VirtualTTY::putcodepoint(uint32_t codepoint)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 
 		switch (codepoint)
 		{
@@ -534,7 +534,7 @@ namespace Kernel
 
 	bool VirtualTTY::putchar_impl(uint8_t ch)
 	{
-		ASSERT(m_write_lock.current_processor_has_lock());
+		ASSERT(m_write_lock.is_locked_by_current_thread());
 
 		uint32_t codepoint = ch;
 

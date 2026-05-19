@@ -21,24 +21,8 @@ namespace Kernel
 		void notify(BAN::RefPtr<Inode> inode, uint32_t event);
 
 	private:
-		Epoll() {
-			m_ino = 0;
-			m_mode = Mode::IRUSR | Mode::IWUSR;
-			m_nlink = 0;
-			m_uid = 0;
-			m_gid = 0;
-			m_size = 0;
-			m_atime = {};
-			m_mtime = {};
-			m_ctime = {};
-			m_blksize = PAGE_SIZE;
-			m_blocks = 0;
-			m_dev = 0;
-			m_rdev = 0;
-			m_kind = InodeKind::EPOLL;
-		}
+		Epoll();
 
-	public:
 		const FileSystem* filesystem() const override { return nullptr; }
 
 		bool can_read_impl() const override { return false; }
@@ -46,7 +30,8 @@ namespace Kernel
 		bool has_error_impl() const override { return false; }
 		bool has_hungup_impl() const override { return false; }
 
-		BAN::ErrorOr<void> fsync_impl() override { return {}; }
+		BAN::ErrorOr<void> sync_inode(SyncType) override { return {}; }
+		BAN::ErrorOr<void> sync_data() override { return {}; }
 
 	private:
 		struct ListenEventList

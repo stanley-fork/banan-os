@@ -18,6 +18,7 @@ namespace Kernel
 		// FIXME: this should probably be ordered tree like map
 		//        for fast lookup and less memory usage
 		BAN::Vector<paddr_t> pages;
+		BAN::Vector<uint32_t> writers;
 		BAN::RefPtr<Inode> inode;
 	};
 

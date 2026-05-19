@@ -49,6 +49,8 @@
 
 #define DEBUG_VTTY 1
 
+#define DEBUG_DEVFS 0
+
 #define DEBUG_PCI 0
 #define DEBUG_SCHEDULER 0
 #define DEBUG_PS2 1

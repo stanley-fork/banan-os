@@ -47,6 +47,7 @@ set(USERSPACE_PROGRAMS
 	sync
 	tee
 	test
+	tr
 	true
 	TaskBar
 	Terminal

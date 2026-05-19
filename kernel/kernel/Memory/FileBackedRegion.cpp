@@ -39,7 +39,9 @@ namespace Kernel
 		if (!(region->m_shared_data = inode->m_shared_region.lock()))
 		{
 			auto shared_data = TRY(BAN::RefPtr<SharedFileData>::create());
-			TRY(shared_data->pages.resize(BAN::Math::div_round_up<size_t>(inode->size(), PAGE_SIZE)));
+			const size_t page_count = BAN::Math::div_round_up<size_t>(inode->size(), PAGE_SIZE);
+			TRY(shared_data->pages.resize(page_count, 0));
+			TRY(shared_data->writers.resize(page_count, 0));
 			shared_data->inode = inode;
 			inode->m_shared_region = TRY(shared_data->get_weak_ptr());
 			region->m_shared_data = BAN::move(shared_data);
@@ -59,9 +61,21 @@ namespace Kernel
 	{
 		if (m_vaddr == 0)
 			return;
-		for (paddr_t dirty_page : m_dirty_pages)
-			if (dirty_page)
-				Heap::get().release_page(dirty_page);
+
+		switch (m_type)
+		{
+			case Type::PRIVATE:
+				for (paddr_t dirty_page : m_dirty_pages)
+					if (dirty_page)
+						Heap::get().release_page(dirty_page);
+				break;
+			case Type::SHARED:
+				const size_t page_count = BAN::Math::div_round_up<size_t>(size(), PAGE_SIZE);
+				for (size_t i = 0; i < page_count; i++)
+					if (m_page_table.get_page_flags(m_vaddr + i * PAGE_SIZE) & PageTable::Flags::ReadWrite)
+						BAN::atomic_sub_fetch(m_shared_data->writers[m_offset / PAGE_SIZE + i], 1);
+				break;
+		}
 	}
 
 	SharedFileData::~SharedFileData()
@@ -79,7 +93,7 @@ namespace Kernel
 
 	void SharedFileData::sync_no_lock(size_t page_index)
 	{
-		if (pages[page_index] == 0)
+		if (pages[page_index] == 0 || BAN::atomic_load(writers[page_index]) == 0)
 			return;
 
 		uint8_t page_buffer[PAGE_SIZE];
@@ -179,11 +193,12 @@ namespace Kernel
 			}
 			else
 			{
-				const paddr_t paddr = m_shared_data->pages[shared_page_index];
 				auto flags = m_flags;
 				if (m_type == Type::PRIVATE)
 					flags &= ~PageTable::Flags::ReadWrite;
-				m_page_table.map_page_at(paddr, vaddr, flags);
+				if (flags & PageTable::Flags::ReadWrite)
+					BAN::atomic_add_fetch(m_shared_data->writers[shared_page_index], 1);
+				m_page_table.map_page_at(m_shared_data->pages[shared_page_index], vaddr, flags);
 			}
 		}
 		else

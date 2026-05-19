@@ -439,6 +439,8 @@ namespace Kernel
 			.cancel_type = 0,
 			.cancel_state = 0,
 			.canceled = 0,
+			.specific_keys = {},
+			.specific_values = {},
 			.dtv = { 0, region->vaddr() }
 		};
 
@@ -1161,26 +1163,27 @@ namespace Kernel
 		}
 	}
 
-	BAN::ErrorOr<void> Process::create_file_or_dir(int fd, const char* path, mode_t mode) const
+	BAN::ErrorOr<void> Process::create_file(int fd, const char* path, mode_t mode) const
 	{
 		switch (mode & Inode::Mode::TYPE_MASK)
 		{
 			case Inode::Mode::IFREG:
-			case Inode::Mode::IFDIR:
 			case Inode::Mode::IFLNK:
 			case Inode::Mode::IFIFO:
 			case Inode::Mode::IFSOCK:
 				break;
 			default:
-				return BAN::Error::from_errno(ENOTSUP);
+				ASSERT_NOT_REACHED();
 		}
 
-		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_EXEC | O_WRONLY));
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
+			LockGuard _(m_process_lock);
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
 
-		if (Inode::Mode(mode).ifdir())
-			TRY(parent.inode->create_directory(file_name, mode, m_credentials.euid(), parent.inode->gid()));
-		else
-			TRY(parent.inode->create_file(file_name, mode, m_credentials.euid(), parent.inode->gid()));
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_EXEC | O_WRONLY));
+		TRY(parent.inode->create_file(file_name, mode, uid, gid));
 
 		return {};
 	}
@@ -1299,22 +1302,36 @@ namespace Kernel
 		return 0;
 	}
 
-	BAN::ErrorOr<long> Process::sys_create_dir(const char* user_path, mode_t mode)
+	BAN::ErrorOr<long> Process::sys_mkdirat(int fd, const char* user_path, mode_t mode)
 	{
 		char path[PATH_MAX];
 		TRY(read_string_from_user(user_path, path, PATH_MAX));
 
-		uid_t uid;
-		gid_t gid;
-
-		{
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
 			LockGuard _(m_process_lock);
-			uid = m_credentials.euid();
-			gid = m_credentials.egid();
-		}
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
 
-		auto [parent, file_name] = TRY(find_parent_file(AT_FDCWD, path, O_WRONLY));
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_WRONLY));
 		TRY(parent.inode->create_directory(file_name, (mode & 0777) | Inode::Mode::IFDIR, uid, gid));
+
+		return 0;
+	}
+
+	BAN::ErrorOr<long> Process::sys_mkfifoat(int fd, const char* user_path, mode_t mode)
+	{
+		char path[PATH_MAX];
+		TRY(read_string_from_user(user_path, path, PATH_MAX));
+
+		struct uid_gid_t { uid_t uid; gid_t gid; };
+		const auto [uid, gid] = ({
+			LockGuard _(m_process_lock);
+			uid_gid_t { m_credentials.euid(), m_credentials.egid() };
+		});
+
+		auto [parent, file_name] = TRY(find_parent_file(fd, path, O_WRONLY));
+		TRY(parent.inode->create_file(file_name, (mode & 0777) | Inode::Mode::IFIFO, uid, gid));
 
 		return 0;
 	}
@@ -1374,7 +1391,6 @@ namespace Kernel
 		if (user_path != nullptr)
 			TRY(read_string_from_user(user_path, path, PATH_MAX));
 
-
 		auto [parent, file_name] = TRY(find_parent_file(fd, user_path ? path : nullptr, O_WRONLY));
 
 		const auto inode = TRY(parent.inode->find_inode(file_name));
@@ -1416,15 +1432,11 @@ namespace Kernel
 		TRY(read_string_from_user(user_path1, path1, PATH_MAX));
 
 		char path2[PATH_MAX];
-		if (user_path2 != nullptr)
-			TRY(read_string_from_user(user_path2, path2, PATH_MAX));
+		TRY(read_string_from_user(user_path2, path2, PATH_MAX));
 
-		if (!find_file(fd, user_path2 ? path2 : nullptr, O_NOFOLLOW).is_error())
-			return BAN::Error::from_errno(EEXIST);
+		TRY(create_file(fd, path2, 0777 | Inode::Mode::IFLNK));
 
-		TRY(create_file_or_dir(fd, user_path2 ? path2 : nullptr, 0777 | Inode::Mode::IFLNK));
-
-		auto symlink = TRY(find_file(fd, user_path2 ? path2 : nullptr, O_NOFOLLOW));
+		auto symlink = TRY(find_file(fd, path2, O_NOFOLLOW));
 		TRY(symlink.inode->set_link_target(path1));
 
 		return 0;
@@ -1523,11 +1535,7 @@ namespace Kernel
 		if (flag == AT_SYMLINK_NOFOLLOW)
 			flag = O_NOFOLLOW;
 
-		const uint64_t current_ns = SystemTimer::get().ns_since_boot();
-		const timespec current_ts = {
-			.tv_sec = static_cast<time_t>(current_ns / 1'000'000),
-			.tv_nsec = static_cast<long>(current_ns % 1'000'000),
-		};
+		const timespec current_ts = SystemTimer::get().real_time();
 
 		timespec times[2];
 		if (user_times == nullptr)
@@ -1548,7 +1556,6 @@ namespace Kernel
 				else if (times[i].tv_nsec < 0 || times[i].tv_nsec >= 1'000'000'000)
 					return BAN::Error::from_errno(EINVAL);
 			}
-
 		}
 
 		if (times[0].tv_nsec == UTIME_OMIT && times[1].tv_nsec == UTIME_OMIT)
@@ -1568,6 +1575,11 @@ namespace Kernel
 				return BAN::Error::from_errno(EPERM);
 			}
 		}
+
+		if (times[0].tv_nsec == UTIME_OMIT)
+			times[0] = inode->atime();
+		if (times[1].tv_nsec == UTIME_OMIT)
+			times[1] = inode->mtime();
 
 		TRY(inode->utimens(times));
 
@@ -1763,12 +1775,13 @@ namespace Kernel
 		TRY(read_from_user(user_message, &message, sizeof(msghdr)));
 
 		BAN::Vector<MemoryRegion*> regions;
+		TRY(regions.reserve(!!message.msg_name + !!message.msg_control + !!message.msg_iov));
+
 		BAN::ScopeGuard _([&regions] {
 			for (auto* region : regions)
 				region->unpin();
 		});
 
-		// FIXME: this can leak memory if push to regions fails but pinning succeeded
 		if (message.msg_name)
 			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_name, message.msg_namelen, true))));
 		if (message.msg_control)
@@ -1776,6 +1789,7 @@ namespace Kernel
 		if (message.msg_iov)
 		{
 			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), true))));
+			TRY(regions.reserve(regions.size() + message.msg_iovlen));
 			for (int i = 0; i < message.msg_iovlen; i++)
 				TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, true))));
 		}
@@ -1793,6 +1807,8 @@ namespace Kernel
 		TRY(read_from_user(user_message, &message, sizeof(msghdr)));
 
 		BAN::Vector<MemoryRegion*> regions;
+		TRY(regions.reserve(!!message.msg_name + !!message.msg_control + !!message.msg_iov));
+
 		BAN::ScopeGuard _([&regions] {
 			for (auto* region : regions)
 				region->unpin();
@@ -1805,6 +1821,7 @@ namespace Kernel
 		if (message.msg_iov)
 		{
 			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), false))));
+			TRY(regions.reserve(regions.size() + message.msg_iovlen));
 			for (int i = 0; i < message.msg_iovlen; i++)
 				TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, false))));
 		}
@@ -3332,20 +3349,24 @@ namespace Kernel
 		if (m_threads.size() == 1)
 			return sys_exit(0);
 
-		TRY(m_exited_pthreads.emplace_back(Thread::current().tid(), value));
+		auto& thread = Thread::current();
+		if (!thread.is_detached())
+		{
+			TRY(m_exited_pthreads.emplace_back(thread.tid(), value));
+			m_pthread_exit_blocker.unblock();
+		}
 
-		m_pthread_exit_blocker.unblock();
 		m_process_lock.unlock();
-		Thread::current().on_exit();
+		thread.on_exit();
 
 		ASSERT_NOT_REACHED();
 	}
 
-	BAN::ErrorOr<long> Process::sys_pthread_join(pthread_t thread, void** user_value)
+	BAN::ErrorOr<long> Process::sys_pthread_join(pthread_t tid, void** user_value)
 	{
 		LockGuard _(m_process_lock);
 
-		if (thread == Thread::current().tid())
+		if (tid == Thread::current().tid())
 			return BAN::Error::from_errno(EINVAL);
 
 		const auto check_thread =
@@ -3353,13 +3374,10 @@ namespace Kernel
 			{
 				for (size_t i = 0; i < m_exited_pthreads.size(); i++)
 				{
-					if (m_exited_pthreads[i].thread != thread)
+					if (m_exited_pthreads[i].thread != tid)
 						continue;
-
 					void* ret = m_exited_pthreads[i].value;
-
 					m_exited_pthreads.remove(i);
-
 					return ret;
 				}
 
@@ -3377,10 +3395,18 @@ namespace Kernel
 
 			{
 				bool found = false;
-				for (auto* _thread : m_threads)
-					if (_thread->tid() == thread)
-						found = true;
+				bool joinable = false;
+				for (auto* thread : m_threads)
+				{
+					if (thread->tid() != tid)
+						continue;
+					found = true;
+					joinable = !thread->is_detached();
+					break;
+				}
 				if (!found)
+					return BAN::Error::from_errno(ESRCH);
+				if (!joinable)
 					return BAN::Error::from_errno(EINVAL);
 			}
 
@@ -3417,6 +3443,24 @@ namespace Kernel
 				.si_band = 0,
 				.si_value = {},
 			});
+			return 0;
+		}
+
+		return BAN::Error::from_errno(ESRCH);
+	}
+
+	BAN::ErrorOr<long> Process::sys_pthread_detach(pthread_t tid)
+	{
+		LockGuard _(m_process_lock);
+
+		for (auto* thread : m_threads)
+		{
+			if (thread->tid() != tid)
+				continue;
+			if (thread->is_detached())
+				return BAN::Error::from_errno(EINVAL);
+			thread->detach();
+			m_pthread_exit_blocker.unblock();
 			return 0;
 		}
 
@@ -3884,6 +3928,8 @@ namespace Kernel
 				region->pin();
 				return region.ptr();
 			}
+
+			return BAN::Error::from_errno(EFAULT);
 		}
 
 	validate_and_pin_pointer_access_with_allocation:

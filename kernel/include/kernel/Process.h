@@ -100,13 +100,14 @@ namespace Kernel
 
 		BAN::ErrorOr<long> open_inode(VirtualFileSystem::File&&, int flags);
 
-		BAN::ErrorOr<void> create_file_or_dir(int fd, const char* path, mode_t mode) const;
-		BAN::ErrorOr<long> sys_openat(int, const char* path, int, mode_t);
+		BAN::ErrorOr<void> create_file(int fd, const char* path, mode_t) const;
+		BAN::ErrorOr<long> sys_openat(int fd, const char* path, int flags, mode_t);
 		BAN::ErrorOr<long> sys_close(int fd);
 		BAN::ErrorOr<long> sys_read(int fd, void* buffer, size_t count);
 		BAN::ErrorOr<long> sys_write(int fd, const void* buffer, size_t count);
 		BAN::ErrorOr<long> sys_access(const char* path, int amode);
-		BAN::ErrorOr<long> sys_create_dir(const char*, mode_t);
+		BAN::ErrorOr<long> sys_mkdirat(int fd, const char* path, mode_t);
+		BAN::ErrorOr<long> sys_mkfifoat(int fd, const char* path, mode_t);
 		BAN::ErrorOr<long> sys_hardlinkat(int fd1, const char* path1, int fd2, const char* path2, int flag);
 		BAN::ErrorOr<long> sys_renameat(int oldfd, const char* old, int newfd, const char* _new);
 		BAN::ErrorOr<long> sys_unlinkat(int fd, const char* path, int flag);
@@ -214,6 +215,7 @@ namespace Kernel
 		BAN::ErrorOr<long> sys_pthread_join(pthread_t thread, void** value);
 		BAN::ErrorOr<long> sys_pthread_self();
 		BAN::ErrorOr<long> sys_pthread_kill(pthread_t thread, int signal);
+		BAN::ErrorOr<long> sys_pthread_detach(pthread_t thread);
 
 		BAN::ErrorOr<long> sys_clock_gettime(clockid_t, timespec*);
 

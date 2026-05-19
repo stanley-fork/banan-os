@@ -21,7 +21,7 @@ namespace Kernel
 		virtual uint32_t lock_depth() const = 0;
 	};
 
-	class Mutex : public BaseMutex
+	class Mutex final : public BaseMutex
 	{
 		BAN_NON_COPYABLE(Mutex);
 		BAN_NON_MOVABLE(Mutex);
@@ -40,6 +40,7 @@ namespace Kernel
 				pid_t expected = -1;
 				while (!m_locker.compare_exchange(expected, tid))
 				{
+					ASSERT(Processor::get_interrupt_state() == InterruptState::Enabled);
 					Processor::yield();
 					expected = -1;
 				}
@@ -84,13 +85,14 @@ namespace Kernel
 		pid_t locker() const override { return m_locker; }
 		bool is_locked() const override { return m_locker != -1; }
 		uint32_t lock_depth() const override { return m_lock_depth; }
+		bool is_locked_by_current_thread() const { return m_locker == Thread::current_tid(); }
 
 	private:
 		BAN::Atomic<pid_t>	m_locker		{ -1 };
 		uint32_t			m_lock_depth	{  0 };
 	};
 
-	class PriorityMutex : public BaseMutex
+	class PriorityMutex final : public BaseMutex
 	{
 		BAN_NON_COPYABLE(PriorityMutex);
 		BAN_NON_MOVABLE(PriorityMutex);
@@ -113,6 +115,7 @@ namespace Kernel
 				pid_t expected = -1;
 				while (!(has_priority || m_queue_length == 0) || !m_locker.compare_exchange(expected, tid))
 				{
+					ASSERT(Processor::get_interrupt_state() == InterruptState::Enabled);
 					Processor::yield();
 					expected = -1;
 				}
@@ -164,6 +167,7 @@ namespace Kernel
 		pid_t locker() const override { return m_locker; }
 		bool is_locked() const override { return m_locker != -1; }
 		uint32_t lock_depth() const override { return m_lock_depth; }
+		bool is_locked_by_current_thread() const { return m_locker == Thread::current_tid(); }
 
 	private:
 		BAN::Atomic<pid_t>		m_locker		{ -1 };

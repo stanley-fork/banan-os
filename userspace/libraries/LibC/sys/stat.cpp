@@ -52,28 +52,27 @@ mode_t umask(mode_t cmask)
 
 int mkdir(const char* path, mode_t mode)
 {
-	return syscall(SYS_CREATE_DIR, path, __UMASKED_MODE(mode));
+	return mkdirat(AT_FDCWD, path, mode);
+}
+
+int mkdirat(int fd, const char* path, mode_t mode)
+{
+	return syscall(SYS_MKDIRAT, fd, path, __UMASKED_MODE(mode));
 }
 
 int mkfifo(const char* path, mode_t mode)
 {
-	(void)path; (void)mode;
-	dwarnln("TODO: mkfifo");
-	return -1;
+	return mkfifoat(AT_FDCWD, path, mode);
 }
 
 int mkfifoat(int fd, const char* path, mode_t mode)
 {
-	(void)fd; (void)path; (void)mode;
-	dwarnln("TODO: mkfifoat");
-	return -1;
+	return syscall(SYS_MKFIFOAT, fd, path, __UMASKED_MODE(mode));
 }
 
 int mknod(const char* path, mode_t mode, dev_t dev)
 {
-	(void)path; (void)mode; (void)dev;
-	dwarnln("TODO: mknod");
-	return -1;
+	return mknodat(AT_FDCWD, path, mode, dev);
 }
 
 int mknodat(int fd, const char* path, mode_t mode, dev_t dev)

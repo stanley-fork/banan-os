@@ -14,6 +14,25 @@ namespace Kernel
 		return BAN::RefPtr<Inode>(BAN::RefPtr<EventFD>::adopt(eventfd_ptr));
 	}
 
+	EventFD::EventFD(uint64_t initval, bool is_semaphore)
+		: m_is_semaphore(is_semaphore)
+		, m_value(initval)
+	{
+		m_ino = 0;
+		m_mode = Mode::IFCHR | Mode::IRUSR | Mode::IWUSR;
+		m_nlink = 0;
+		m_uid = 0;
+		m_gid = 0;
+		m_size = 0;
+		m_atime = {};
+		m_mtime = {};
+		m_ctime = {};
+		m_blksize = 8;
+		m_blocks = 0;
+		m_dev = 0;
+		m_rdev = 0;
+	}
+
 	BAN::ErrorOr<size_t> EventFD::read_impl(off_t, BAN::ByteSpan buffer)
 	{
 		if (buffer.size() < sizeof(uint64_t))

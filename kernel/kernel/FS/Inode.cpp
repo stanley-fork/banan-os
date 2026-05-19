@@ -246,50 +246,73 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Inode::chmod(mode_t mode)
 	{
-		ASSERT((mode & Inode::Mode::TYPE_MASK) == 0);
 		if (auto* fs = filesystem(); fs && (fs->flag() & ST_RDONLY))
 			return BAN::Error::from_errno(EROFS);
-		return chmod_impl(mode);
+
+		ASSERT((mode & Inode::Mode::TYPE_MASK) == 0);
+		mode |= m_mode & Inode::Mode::TYPE_MASK;
+
+		const auto old_mode = m_mode.exchange(mode);
+
+		if (auto ret = sync_inode(SyncType::Mode); ret.is_error())
+		{
+			m_mode.compare_exchange(mode, old_mode);
+			return ret.release_error();
+		}
+
+		return {};
 	}
 
 	BAN::ErrorOr<void> Inode::chown(uid_t uid, gid_t gid)
 	{
 		if (auto* fs = filesystem(); fs && (fs->flag() & ST_RDONLY))
 			return BAN::Error::from_errno(EROFS);
-		return chown_impl(uid, gid);
+
+		// TODO: unify uid and gid to a single atomic operation.
+		//       this needs 64 bit atomic support from 32 bit target
+
+		const auto old_uid = m_uid.exchange(uid);
+		const auto old_gid = m_gid.exchange(gid);
+
+		if (auto ret = sync_inode(SyncType::UidGid); ret.is_error())
+		{
+			m_uid.compare_exchange(uid, old_uid);
+			m_gid.compare_exchange(gid, old_gid);
+			return ret.release_error();
+		}
+
+		return {};
 	}
 
 	BAN::ErrorOr<void> Inode::utimens(const timespec times[2])
 	{
 		if (auto* fs = filesystem(); fs && (fs->flag() & ST_RDONLY))
 			return BAN::Error::from_errno(EROFS);
-		return utimens_impl(times);
+
+		// TODO: make these atomic
+
+		const auto old_atime = m_atime;
+		const auto old_mtime = m_mtime;
+
+		m_atime = times[0];
+		m_mtime = times[1];
+
+		if (auto ret = sync_inode(SyncType::Times); ret.is_error())
+		{
+			m_atime = old_atime;
+			m_mtime = old_mtime;
+			return ret.release_error();
+		}
+
+		return {};
 	}
 
 	BAN::ErrorOr<void> Inode::fsync()
 	{
-		// TODO: should we sync shared data?
-		return fsync_impl();
-	}
-
-	bool Inode::can_read() const
-	{
-		return can_read_impl();
-	}
-
-	bool Inode::can_write() const
-	{
-		return can_write_impl();
-	}
-
-	bool Inode::has_error() const
-	{
-		return has_error_impl();
-	}
-
-	bool Inode::has_hungup() const
-	{
-		return has_hungup_impl();
+		// TODO: should we sync MAP_SHARED data?
+		TRY(sync_inode(SyncType::General));
+		TRY(sync_data());
+		return {};
 	}
 
 	BAN::ErrorOr<long> Inode::ioctl(int request, void* arg)

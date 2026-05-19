@@ -117,6 +117,9 @@ namespace Kernel
 		const Process& process() const;
 		bool has_process() const { return m_process; }
 
+		void detach() { m_is_detached = true; }
+		bool is_detached() const { return m_is_detached; }
+
 		bool is_userspace() const { return m_is_userspace; }
 
 		uint64_t cpu_time_ns() const;
@@ -176,6 +179,7 @@ namespace Kernel
 		State                      m_state                { State::NotStarted };
 		Process*                   m_process              { nullptr };
 		bool                       m_is_userspace         { false };
+		BAN::Atomic<bool>          m_is_detached          { false };
 		bool                       m_delete_process       { false };
 
 		vaddr_t                    m_fsbase               { 0 };

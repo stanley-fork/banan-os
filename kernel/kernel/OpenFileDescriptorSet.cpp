@@ -85,6 +85,9 @@ namespace Kernel
 
 		constexpr int status_mask = O_APPEND | O_DSYNC | O_NONBLOCK | O_RSYNC | O_SYNC | O_ACCMODE;
 
+		if (file.inode->mode().ififo())
+			file.inode = TRY(Pipe::open(file.inode, flags & status_mask));
+
 		LockGuard _(m_mutex);
 
 		const int fd = TRY(get_free_fd());
@@ -214,7 +217,7 @@ namespace Kernel
 
 		TRY(get_free_fd_pair(fds));
 
-		auto pipe = TRY(Pipe::create(m_credentials));
+		auto pipe = TRY(Pipe::create(m_credentials.euid(), m_credentials.egid()));
 		m_open_files[fds[0]] = TRY(BAN::RefPtr<OpenFileDescription>::create(VirtualFileSystem::File(pipe, "<pipe rd>"_sv), 0, O_RDONLY));
 		m_open_files[fds[1]] = TRY(BAN::RefPtr<OpenFileDescription>::create(VirtualFileSystem::File(pipe, "<pipe wr>"_sv), 0, O_WRONLY));
 

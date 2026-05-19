@@ -61,7 +61,9 @@ namespace Kernel
 			bool ifsock() const { return (mode & Mask::TYPE_MASK) == Mask::IFSOCK; }
 			mode_t mode;
 		};
-		enum InodeKind : uint8_t {
+
+		enum InodeKind : uint8_t
+		{
 			DEVICE    = 0x01,
 			EPOLL     = 0x02,
 			PIPE      = 0x04,
@@ -69,6 +71,15 @@ namespace Kernel
 			PARTITION = 0x10,
 			STORAGE   = 0x20,
 		};
+
+		enum class SyncType
+		{
+			General,
+			Mode,
+			UidGid,
+			Times,
+		};
+
 	public:
 		virtual ~Inode() {}
 
@@ -134,10 +145,10 @@ namespace Kernel
 		BAN::ErrorOr<void> fsync();
 
 		// Select/Non blocking API
-		bool can_read() const;
-		bool can_write() const;
-		bool has_error() const;
-		bool has_hungup() const;
+		bool can_read() const   { return can_read_impl(); }
+		bool can_write() const  { return can_write_impl(); }
+		bool has_error() const  { return has_error_impl(); }
+		bool has_hungup() const { return has_hungup_impl(); }
 
 		BAN::ErrorOr<long> ioctl(int request, void* arg);
 
@@ -147,6 +158,9 @@ namespace Kernel
 
 		virtual void on_close(int status_flags) { (void)status_flags; }
 		virtual void on_clone(int status_flags) { (void)status_flags; }
+
+		virtual BAN::ErrorOr<void> sync_inode(SyncType) = 0;
+		virtual BAN::ErrorOr<void> sync_data() = 0;
 
 	protected:
 		// Directory API
@@ -178,10 +192,6 @@ namespace Kernel
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan)		{ return BAN::Error::from_errno(ENOTSUP); }
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan)	{ return BAN::Error::from_errno(ENOTSUP); }
 		virtual BAN::ErrorOr<void> truncate_impl(size_t)					{ return BAN::Error::from_errno(ENOTSUP); }
-		virtual BAN::ErrorOr<void> chmod_impl(mode_t)						{ return BAN::Error::from_errno(ENOTSUP); }
-		virtual BAN::ErrorOr<void> chown_impl(uid_t, gid_t)					{ return BAN::Error::from_errno(ENOTSUP); }
-		virtual BAN::ErrorOr<void> utimens_impl(const timespec[2])			{ return BAN::Error::from_errno(ENOTSUP); }
-		virtual BAN::ErrorOr<void> fsync_impl() = 0;
 
 		// Select/Non blocking API
 		virtual bool can_read_impl() const = 0;
@@ -196,6 +206,7 @@ namespace Kernel
 		// But the thing is I would have to refactor a big chunk of the codebase
 		// to add it as a parameter to Inode() soooooo yeah no, not doing that rn.
 		uint8_t m_kind = 0;
+
 		BAN::Atomic<ino_t>     m_ino;
 		BAN::Atomic<mode_t>    m_mode;
 		BAN::Atomic<nlink_t>   m_nlink;
@@ -210,12 +221,14 @@ namespace Kernel
 		BAN::Atomic<blkcnt_t>  m_blocks;
 		BAN::Atomic<dev_t>     m_dev;
 		BAN::Atomic<dev_t>     m_rdev;
+
 	private:
 		SpinLock m_shared_region_lock;
 		BAN::WeakPtr<SharedFileData> m_shared_region;
 
 		SpinLock m_epoll_lock;
 		BAN::LinkedList<class Epoll*> m_epolls;
+
 		friend class Epoll;
 		friend class FileBackedRegion;
 		friend class OpenFileDescriptorSet;

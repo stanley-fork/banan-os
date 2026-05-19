@@ -14,6 +14,24 @@ namespace Kernel
 		return BAN::RefPtr<Epoll>::adopt(epoll_ptr);
 	}
 
+	Epoll::Epoll()
+	{
+		m_ino = 0;
+		m_mode = Mode::IRUSR | Mode::IWUSR;
+		m_nlink = 0;
+		m_uid = 0;
+		m_gid = 0;
+		m_size = 0;
+		m_atime = {};
+		m_mtime = {};
+		m_ctime = {};
+		m_blksize = PAGE_SIZE;
+		m_blocks = 0;
+		m_dev = 0;
+		m_rdev = 0;
+		m_kind = InodeKind::EPOLL;
+	}
+
 	Epoll::~Epoll()
 	{
 		for (auto& [inode, _] : m_listening_events)

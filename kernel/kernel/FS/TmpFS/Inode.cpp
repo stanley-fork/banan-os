@@ -92,41 +92,14 @@ namespace Kernel
 	{
 		if (nlink() > 0)
 		{
-			sync();
+			write_inode_to_fs();
 			return;
 		}
 		free_all_blocks();
 		m_fs.delete_inode(ino());
 	}
 
-	BAN::ErrorOr<void> TmpInode::chmod_impl(mode_t new_mode)
-	{
-		// FIXME: make this atomic
-		ASSERT(!(new_mode & Inode::Mode::TYPE_MASK));
-		m_mode &= Inode::Mode::TYPE_MASK;
-		m_mode |= new_mode;
-		return {};
-	}
-
-	BAN::ErrorOr<void> TmpInode::chown_impl(uid_t new_uid, gid_t new_gid)
-	{
-		// FIXME: make this atomic
-		m_uid = new_uid;
-		m_gid = new_gid;
-		return {};
-	}
-
-	BAN::ErrorOr<void> TmpInode::utimens_impl(const timespec times[2])
-	{
-		// FIXME: make this atomic
-		if (times[0].tv_nsec != UTIME_OMIT)
-			m_atime = times[0];
-		if (times[1].tv_nsec != UTIME_OMIT)
-			m_atime = times[1];
-		return {};
-	}
-
-	void TmpInode::sync()
+	void TmpInode::write_inode_to_fs()
 	{
 		TmpInodeInfo info = {
 			.mode   = m_mode.load(),
@@ -141,6 +114,16 @@ namespace Kernel
 			.tmp_blocks = m_tmp_blocks,
 		};
 		m_fs.write_inode(m_ino, info);
+	}
+
+	BAN::ErrorOr<void> TmpInode::sync_inode(SyncType)
+	{
+		return {};
+	}
+
+	BAN::ErrorOr<void> TmpInode::sync_data()
+	{
+		return {};
 	}
 
 	void TmpInode::free_all_blocks()
@@ -408,7 +391,32 @@ namespace Kernel
 		return {};
 	}
 
+	/* FIFO INODE */
+
+	BAN::ErrorOr<BAN::RefPtr<TmpFIFOInode>> TmpFIFOInode::create_new(TmpFileSystem& fs, mode_t mode, uid_t uid, gid_t gid)
+	{
+		auto info = create_inode_info(Mode::IFIFO | mode, uid, gid);
+		ino_t ino = TRY(fs.allocate_inode(info));
+
+		auto* inode_ptr = new TmpFIFOInode(fs, ino, info);
+		if (inode_ptr == nullptr)
+			return BAN::Error::from_errno(ENOMEM);
+
+		return BAN::RefPtr<TmpFIFOInode>::adopt(inode_ptr);
+	}
+
+	TmpFIFOInode::TmpFIFOInode(TmpFileSystem& fs, ino_t ino, const TmpInodeInfo& info)
+		: TmpInode(fs, ino, info)
+	{
+		ASSERT(mode().ififo());
+	}
+
+	TmpFIFOInode::~TmpFIFOInode()
+	{
+	}
+
 	/* SOCKET INODE */
+
 	BAN::ErrorOr<BAN::RefPtr<TmpSocketInode>> TmpSocketInode::create_new(TmpFileSystem& fs, mode_t mode, uid_t uid, gid_t gid)
 	{
 		auto info = create_inode_info(Mode::IFSOCK | mode, uid, gid);
@@ -678,6 +686,9 @@ namespace Kernel
 				break;
 			case Mode::IFLNK:
 				new_inode = TRY(TmpSymlinkInode::create_new(m_fs, mode, uid, gid, ""_sv));
+				break;
+			case Mode::IFIFO:
+				new_inode = TRY(TmpFIFOInode::create_new(m_fs, mode, uid, gid));
 				break;
 			case Mode::IFSOCK:
 				new_inode = TRY(TmpSocketInode::create_new(m_fs, mode, uid, gid));

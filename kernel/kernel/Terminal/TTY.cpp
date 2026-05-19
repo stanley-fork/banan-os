@@ -155,22 +155,6 @@ namespace Kernel
 		DevFileSystem::get().add_inode("tty", MUST(DevTTY::create(0666, 0, 0)));
 	}
 
-	BAN::ErrorOr<void> TTY::chmod_impl(mode_t mode)
-	{
-		// FIXME: make this atomic
-		ASSERT((mode & Inode::Mode::TYPE_MASK) == 0);
-		m_mode &= Inode::Mode::TYPE_MASK;
-		m_mode |= mode;
-		return {};
-	}
-
-	BAN::ErrorOr<void> TTY::chown_impl(uid_t uid, gid_t gid)
-	{
-		m_uid = uid;
-		m_gid = gid;
-		return {};
-	}
-
 	void TTY::update_winsize(unsigned short cols, unsigned short rows)
 	{
 		// FIXME: make this atomic
@@ -424,7 +408,7 @@ namespace Kernel
 
 		const auto termios = get_termios();
 
-		SpinLockGuard _1(m_write_lock);
+		LockGuard _(m_write_lock);
 		if (termios.c_oflag & OPOST)
 		{
 			if ((termios.c_oflag & ONLCR) && ch == NL)
@@ -471,15 +455,13 @@ namespace Kernel
 
 	BAN::ErrorOr<size_t> TTY::write_impl(off_t, BAN::ConstByteSpan buffer)
 	{
-		SpinLockGuard write_guard(m_write_lock);
+		LockGuard write_guard(m_write_lock);
 
 		while (!can_write())
 		{
 			if (master_has_closed())
 				return BAN::Error::from_errno(EIO);
-
-			SpinLockGuardAsMutex smutex(write_guard);
-			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &smutex));
+			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &m_write_lock));
 		}
 
 		size_t written = 0;
@@ -497,7 +479,7 @@ namespace Kernel
 	void TTY::putchar_current(uint8_t ch)
 	{
 		ASSERT(s_tty);
-		SpinLockGuard _(s_tty->m_write_lock);
+		LockGuard _(s_tty->m_write_lock);
 		s_tty->putchar(ch);
 		s_tty->after_write();
 	}

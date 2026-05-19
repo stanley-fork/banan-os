@@ -1398,6 +1398,8 @@ static void initialize_tls(MasterTLS master_tls)
 		.cancel_type = PTHREAD_CANCEL_DEFERRED,
 		.cancel_state = PTHREAD_CANCEL_ENABLE,
 		.canceled = false,
+		.specific_keys = {},
+		.specific_values = {},
 		.dtv = {},
 	};
 

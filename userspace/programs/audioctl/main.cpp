@@ -117,6 +117,7 @@ int main(int argc, char** argv)
 			{ "pin",    required_argument, nullptr, 'p' },
 			{ "volume", required_argument, nullptr, 'v' },
 			{ "help",   no_argument,       nullptr, 'h' },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "ld:p:v:h", long_options, nullptr);
@@ -125,16 +126,6 @@ int main(int argc, char** argv)
 
 		switch (ch)
 		{
-			case 'h':
-				fprintf(stderr, "usage: %s [OPTIONS]...\n", argv[0]);
-				fprintf(stderr, "  control the audio server\n");
-				fprintf(stderr, "OPTIONS:\n");
-				fprintf(stderr, "  -l, --list      list devices and their pins\n");
-				fprintf(stderr, "  -d, --device N  set device index N as the current one\n");
-				fprintf(stderr, "  -p, --pin N     set pin N as the current one\n");
-				fprintf(stderr, "  -v, --volume N  set volume to N%%. if + or - is given, volume is relative to the current volume\n");
-				fprintf(stderr, "  -h, --help      show this message and exit\n");
-				return 0;
 			case 'l':
 				list = true;
 				break;
@@ -149,8 +140,17 @@ int main(int argc, char** argv)
 					volume_rel = (optarg[0] == '-');
 				volume = parse_u32_or_exit(optarg + volume_rel.has_value());
 				break;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case 'h':
+				fprintf(stderr, "usage: %s [OPTIONS]...\n", argv[0]);
+				fprintf(stderr, "  control the audio server\n");
+				fprintf(stderr, "OPTIONS:\n");
+				fprintf(stderr, "  -l, --list      list devices and their pins\n");
+				fprintf(stderr, "  -d, --device N  set device index N as the current one\n");
+				fprintf(stderr, "  -p, --pin N     set pin N as the current one\n");
+				fprintf(stderr, "  -v, --volume N  set volume to N%%. if + or - is given, volume is relative to the current volume\n");
+				fprintf(stderr, "  -h, --help      show this message and exit\n");
+				return 0;
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}

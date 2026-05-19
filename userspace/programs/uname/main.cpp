@@ -20,6 +20,7 @@ int main(int argc, char** argv)
 			{ "kernel-name",    no_argument, nullptr, 's' },
 			{ "kernel-version", no_argument, nullptr, 'v' },
 			{ "help",           no_argument, nullptr,  0  },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "amnrsv", long_options, nullptr);
@@ -28,15 +29,6 @@ int main(int argc, char** argv)
 
 		switch (ch)
 		{
-			case 0:
-				printf("usage: %s [OPTION]...\n", argv[0]);
-				printf("  -a, --all        print all information\n");
-				printf("  -m, --machine    print machine name\n");
-				printf("  -r, --release    print release\n");
-				printf("  -n, --nodename   print node name\n");
-				printf("  -s, --system     print system name\n");
-				printf("  -v, --version    print version\n");
-				return 0;
 			case 'a':
 				machine = true;
 				nodename = true;
@@ -59,8 +51,17 @@ int main(int argc, char** argv)
 			case 'v':
 				version = true;
 				break;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case 0:
+				printf("usage: %s [OPTION]...\n", argv[0]);
+				printf("  -a, --all        print all information\n");
+				printf("  -m, --machine    print machine name\n");
+				printf("  -r, --release    print release\n");
+				printf("  -n, --nodename   print node name\n");
+				printf("  -s, --system     print system name\n");
+				printf("  -v, --version    print version\n");
+				printf("      --help       show this message and exit\n");
+				return 0;
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}

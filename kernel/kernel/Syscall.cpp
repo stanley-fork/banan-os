@@ -124,6 +124,7 @@ namespace Kernel
 			case SYS_RECVMSG:
 			case SYS_SENDMSG:
 			case SYS_FLOCK:
+			case SYS_FUTEX:
 				return true;
 			default:
 				return false;

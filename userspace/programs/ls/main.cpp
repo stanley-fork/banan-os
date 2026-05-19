@@ -5,17 +5,24 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <termios.h>
 
-struct config_t
+struct Config
 {
-	bool list		= false;
-	bool all		= false;
-	bool directory	= false;
+	enum class Visibility {
+		Normal,
+		AlmostAll,
+		All
+	};
+	Visibility visibility { Visibility::Normal };
+	bool show_as_list     { false };
+	bool human_readable   { false };
+	bool directory        { false };
 };
 
 struct simple_entry_t
@@ -58,7 +65,7 @@ const char* entry_color(mode_t mode)
 	return "\e[0m";
 }
 
-BAN::String build_access_string(mode_t mode)
+BAN::String build_access_string(mode_t mode, const Config&)
 {
 	BAN::String access;
 	MUST(access.resize(10));
@@ -75,12 +82,12 @@ BAN::String build_access_string(mode_t mode)
 	return access;
 }
 
-BAN::String build_hard_links_string(nlink_t links)
+BAN::String build_hard_links_string(nlink_t links, const Config&)
 {
 	return MUST(BAN::String::formatted("{}", links));
 }
 
-BAN::String build_owner_name_string(uid_t uid)
+BAN::String build_owner_name_string(uid_t uid, const Config&)
 {
 	struct passwd* passwd = getpwuid(uid);
 	if (passwd == nullptr)
@@ -88,7 +95,7 @@ BAN::String build_owner_name_string(uid_t uid)
 	return BAN::String(BAN::StringView(passwd->pw_name));
 }
 
-BAN::String build_owner_group_string(gid_t gid)
+BAN::String build_owner_group_string(gid_t gid, const Config&)
 {
 	struct group* grp = getgrgid(gid);
 	if (grp == nullptr)
@@ -96,23 +103,35 @@ BAN::String build_owner_group_string(gid_t gid)
 	return BAN::String(BAN::StringView(grp->gr_name));
 }
 
-BAN::String build_size_string(off_t size)
+BAN::String build_size_string(off_t size, const Config& config)
 {
-	return MUST(BAN::String::formatted("{}", size));
+	if (!config.human_readable || size < 1024)
+		return MUST(BAN::String::formatted("{}", size));
+
+	size = size / 1024 * 10;
+
+	size_t suffix_idx = 0;
+	for (; size >= 10240; size /= 1024)
+		suffix_idx++;
+
+	constexpr char suffix[] { 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q' };
+	if (size >= 100)
+		return MUST(BAN::String::formatted("{}{}", size / 10, suffix[suffix_idx]));
+	return MUST(BAN::String::formatted("{}.{}{}", size / 10, size % 10, suffix[suffix_idx]));
 }
 
-BAN::String build_month_string(BAN::Time time)
+BAN::String build_month_string(BAN::Time time, const Config&)
 {
 	static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 	return BAN::String(BAN::StringView(months[(time.month - 1) % 12]));
 }
 
-BAN::String build_day_string(BAN::Time time)
+BAN::String build_day_string(BAN::Time time, const Config&)
 {
 	return MUST(BAN::String::formatted("{}", time.day));
 }
 
-BAN::String build_time_string(BAN::Time time)
+BAN::String build_time_string(BAN::Time time, const Config&)
 {
 	static uint32_t current_year = ({ timespec real_time; clock_gettime(CLOCK_REALTIME, &real_time); BAN::from_unix_time(real_time.tv_sec).year; });
 	if (time.year != current_year)
@@ -151,7 +170,7 @@ BAN::Vector<size_t> resolve_layout(const BAN::Vector<simple_entry_t>& entries)
 	return {};
 }
 
-int list_directory(const BAN::String& path, config_t config)
+int list_directory(const BAN::String& path, Config config)
 {
 	static char link_buffer[PATH_MAX];
 
@@ -166,9 +185,14 @@ int list_directory(const BAN::String& path, config_t config)
 		return 2;
 	}
 
+	const bool is_directory = S_ISDIR(st.st_mode);
+
+	const size_t block_size = st.st_blksize;
+	size_t blocks_used = 0;
+
 	int ret = 0;
 
-	if (!S_ISDIR(st.st_mode))
+	if (!is_directory)
 	{
 		MUST(entries.emplace_back(path, st, BAN::String()));
 		if (S_ISLNK(st.st_mode))
@@ -191,8 +215,19 @@ int list_directory(const BAN::String& path, config_t config)
 		struct dirent* dirent;
 		while ((dirent = readdir(dirp)))
 		{
-			if (!config.all && dirent->d_name[0] == '.')
-				continue;
+			switch (config.visibility)
+			{
+				case Config::Visibility::Normal:
+					if (dirent->d_name[0] == '.')
+						continue;
+					break;
+				case Config::Visibility::AlmostAll:
+					if (strcmp(dirent->d_name, ".") == 0 || strcmp(dirent->d_name, "..") == 0)
+						continue;
+					break;
+				case Config::Visibility::All:
+					break;
+			}
 
 			if (fstatat(dirfd(dirp), dirent->d_name, &st, AT_SYMLINK_NOFOLLOW) == -1)
 			{
@@ -200,6 +235,8 @@ int list_directory(const BAN::String& path, config_t config)
 				ret = 1;
 				continue;
 			}
+
+			blocks_used += st.st_blocks;
 
 			MUST(entries.emplace_back(BAN::StringView(dirent->d_name), st, BAN::String()));
 			if (S_ISLNK(st.st_mode))
@@ -218,8 +255,8 @@ int list_directory(const BAN::String& path, config_t config)
 		[](const simple_entry_t& lhs, const simple_entry_t& rhs)
 		{
 			// sort directories first
-			bool lhs_isdir = S_ISDIR(lhs.st.st_mode);
-			bool rhs_isdir = S_ISDIR(rhs.st.st_mode);
+			const bool lhs_isdir = S_ISDIR(lhs.st.st_mode);
+			const bool rhs_isdir = S_ISDIR(rhs.st.st_mode);
 			if (lhs_isdir != rhs_isdir)
 				return lhs_isdir;
 
@@ -231,7 +268,7 @@ int list_directory(const BAN::String& path, config_t config)
 		}
 	);
 
-	if (!config.list)
+	if (!config.show_as_list)
 	{
 		if (!g_stdout_terminal)
 		{
@@ -297,9 +334,9 @@ int list_directory(const BAN::String& path, config_t config)
 	{
 		full_entry_t full_entry;
 
-#define GET_ENTRY_STRING(property, input)							\
-	full_entry.property = build_ ## property ## _string(input);		\
-	if (full_entry.property.size() > max_entry.property.size())		\
+#define GET_ENTRY_STRING(property, input)                               \
+	full_entry.property = build_ ## property ## _string(input, config); \
+	if (full_entry.property.size() > max_entry.property.size())         \
 		max_entry.property = full_entry.property;
 
 		GET_ENTRY_STRING(access,		entry.st.st_mode);
@@ -321,6 +358,14 @@ int list_directory(const BAN::String& path, config_t config)
 		}
 
 		MUST(full_entries.push_back(BAN::move(full_entry)));
+	}
+
+	if (is_directory)
+	{
+		if (config.human_readable)
+			printf("total: %s\n", build_size_string(blocks_used * block_size, config).data());
+		else
+			printf("total: %zu\n", blocks_used);
 	}
 
 	for (const auto& full_entry : full_entries)
@@ -350,60 +395,65 @@ int usage(const char* argv0, int ret)
 	return ret;
 }
 
-int main(int argc, const char* argv[])
+int main(int argc, char* argv[])
 {
-	config_t config;
+	Config config;
 
-	int i = 1;
-	for (; i < argc; i++)
+	for (;;)
 	{
-		if (argv[i][0] != '-')
-			break;
-		if (argv[i][1] == '\0')
+		static option long_options[] {
+			{ "all",            no_argument, nullptr, 'a' },
+			{ "almost-all",     no_argument, nullptr, 'A' },
+			{ "directory" ,     no_argument, nullptr, 'd' },
+			{ "human-readable", no_argument, nullptr, 'h' },
+			{ "list",           no_argument, nullptr, 'l' },
+			{ "help",           no_argument, nullptr,  0  },
+			{}
+		};
+
+		int ch = getopt_long(argc, argv, "aAlh", long_options, nullptr);
+		if (ch == -1)
 			break;
 
-		if (argv[i][1] == '-')
+		switch (ch)
 		{
-			if (strcmp(argv[i], "--help") == 0)
-				return usage(argv[0], 0);
-			else if (strcmp(argv[i], "--all") == 0)
-				config.all = true;
-			else if (strcmp(argv[i], "--list") == 0)
-				config.list = true;
-			else if (strcmp(argv[i], "--directory") == 0)
+			case 'a':
+				config.visibility = Config::Visibility::All;
+				break;
+			case 'A':
+				config.visibility = Config::Visibility::AlmostAll;
+				break;
+			case 'd':
 				config.directory = true;
-			else
-			{
-				fprintf(stderr, "unrecognized option '%s'\n", argv[i]);
-				return usage(argv[0], 2);
-			}
-		}
-		else
-		{
-			for (size_t j = 1; argv[i][j]; j++)
-			{
-				if (argv[i][j] == 'h')
-					return usage(argv[0], 0);
-				else if (argv[i][j] == 'a')
-					config.all = true;
-				else if (argv[i][j] == 'l')
-					config.list = true;
-				else if (argv[i][j] == 'd')
-					config.directory = true;
-				else
-				{
-					fprintf(stderr, "unrecognized option '%c'\n", argv[i][j]);
-					return usage(argv[0], 2);
-				}
-			}
+				break;
+			case 'h':
+				config.human_readable = true;
+				break;
+			case 'l':
+				config.show_as_list = true;
+				break;
+			case 0:
+				fprintf(stderr, "usage: %s [OPTION]... [FILE]...\n", argv[0]);
+				fprintf(stderr, "  list information about FILEs\n");
+				fprintf(stderr, "OPTIONS:\n");
+				fprintf(stderr, "  -a, --all             do not ignore entries starting with .\n");
+				fprintf(stderr, "  -A, --almost-all      do not list . and ..\n");
+				fprintf(stderr, "  -d, --directory       list directories and not their contents\n");
+				fprintf(stderr, "  -h, --human-readable  print sizes in human readable form\n");
+				fprintf(stderr, "  -l, --list            use long listing format\n");
+				fprintf(stderr, "      --help            show this message and exit\n");
+				return 0;
+			case ':': case '?':
+				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
+				return 1;
 		}
 	}
 
 	BAN::Vector<BAN::String> files;
 
-	if (i == argc)
+	if (optind == argc)
 		MUST(files.emplace_back("."_sv));
-	else for (; i < argc; i++)
+	else for (int i = optind; i < argc; i++)
 		MUST(files.emplace_back(BAN::StringView(argv[i])));
 
 	g_stdout_terminal = isatty(STDOUT_FILENO) && tcgetwinsize(STDOUT_FILENO, &g_terminal_size) == 0;

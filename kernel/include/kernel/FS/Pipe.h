@@ -5,23 +5,30 @@
 #include <kernel/Memory/ByteRingBuffer.h>
 #include <kernel/ThreadBlocker.h>
 
+#include <sys/stat.h>
+
 namespace Kernel
 {
 
-	class Pipe : public Inode
+	class Pipe final : public Inode, public BAN::Weakable<Pipe>
 	{
 	public:
-		static BAN::ErrorOr<BAN::RefPtr<Inode>> create(const Credentials&);
+		static BAN::ErrorOr<BAN::RefPtr<Inode>> open(BAN::RefPtr<Inode>, int status_flags);
+		static BAN::ErrorOr<BAN::RefPtr<Inode>> create(uid_t, gid_t);
+		~Pipe();
 
 		void on_close(int status_flags) override;
 		void on_clone(int status_flags) override;
 
 		virtual const FileSystem* filesystem() const override { return nullptr; }
 
-	protected:
+	private:
+		virtual BAN::ErrorOr<void> sync_inode(SyncType) override;
+		virtual BAN::ErrorOr<void> sync_data() override;
+
 		virtual BAN::ErrorOr<size_t> read_impl(off_t, BAN::ByteSpan) override;
 		virtual BAN::ErrorOr<size_t> write_impl(off_t, BAN::ConstByteSpan) override;
-		virtual BAN::ErrorOr<void> fsync_impl() final override { return {}; }
+		virtual BAN::ErrorOr<void> truncate_impl(size_t) override;
 
 		virtual bool can_read_impl() const override { return !m_buffer->empty(); }
 		virtual bool can_write_impl() const override { return true; }
@@ -31,7 +38,7 @@ namespace Kernel
 		virtual BAN::ErrorOr<long> ioctl_impl(int, void*) override;
 
 	private:
-		Pipe(const Credentials&);
+		Pipe(const struct stat&);
 
 	private:
 		Mutex m_mutex;
@@ -39,8 +46,10 @@ namespace Kernel
 
 		BAN::UniqPtr<ByteRingBuffer> m_buffer;
 
-		BAN::Atomic<uint32_t> m_writing_count { 1 };
-		BAN::Atomic<uint32_t> m_reading_count { 1 };
+		BAN::Atomic<uint32_t> m_writing_count { 0 };
+		BAN::Atomic<uint32_t> m_reading_count { 0 };
+
+		BAN::RefPtr<Inode> m_named_inode;
 	};
 
 }

@@ -197,6 +197,7 @@ int main(int argc, char** argv)
 	{
 		static option long_options[] {
 			{ "help", no_argument, nullptr, 'h' },
+			{}
 		};
 
 		int ch = getopt_long(argc, argv, "h", long_options, nullptr);
@@ -211,8 +212,7 @@ int main(int argc, char** argv)
 				printf("OPTIONS:\n");
 				printf("    -h, --help   Show this message and exit\n");
 				return 0;
-			case '?':
-				fprintf(stderr, "invalid option %c\n", optopt);
+			case ':': case '?':
 				fprintf(stderr, "see '%s --help' for usage\n", argv[0]);
 				return 1;
 		}
