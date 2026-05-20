@@ -1245,6 +1245,28 @@ static MasterTLS initialize_master_tls()
 		module_count++;
 	}
 
+	{
+		const sys_mmap_t mmap_args {
+			.addr = nullptr,
+			.len = sizeof(_dynamic_tls_t) + s_max_loaded_files * sizeof(_dynamic_tls_entry_t),
+			.prot = PROT_READ | PROT_WRITE,
+			.flags = MAP_ANONYMOUS | MAP_PRIVATE,
+			.fildes = -1,
+			.off = 0,
+		};
+
+		const auto ret = syscall(SYS_MMAP, &mmap_args);
+		if (ret < 0)
+			print_error_and_exit("failed to allocate dynamic TLS", ret);
+		s_dynamic_tls = reinterpret_cast<_dynamic_tls_t*>(ret);
+
+		*s_dynamic_tls = {
+			.lock = 0,
+			.entry_count = 0,
+			.entries = reinterpret_cast<_dynamic_tls_entry_t*>(s_dynamic_tls + 1),
+		};
+	}
+
 	if (module_count == 0)
 		return { .addr = nullptr, .size = 0, .module_count = 0 };
 
@@ -1293,28 +1315,6 @@ static MasterTLS initialize_master_tls()
 		elf.tls_addr = tls_buffer;
 		elf.tls_module = s_tls_module++;
 		elf.tls_offset = tls_offset;
-	}
-
-	{
-		const sys_mmap_t mmap_args {
-			.addr = nullptr,
-			.len = sizeof(_dynamic_tls_t) + s_max_loaded_files * sizeof(_dynamic_tls_entry_t),
-			.prot = PROT_READ | PROT_WRITE,
-			.flags = MAP_ANONYMOUS | MAP_PRIVATE,
-			.fildes = -1,
-			.off = 0,
-		};
-
-		const auto ret = syscall(SYS_MMAP, &mmap_args);
-		if (ret < 0)
-			print_error_and_exit("failed to allocate dynamic TLS", ret);
-		s_dynamic_tls = reinterpret_cast<_dynamic_tls_t*>(ret);
-
-		*s_dynamic_tls = {
-			.lock = 0,
-			.entry_count = 0,
-			.entries = reinterpret_cast<_dynamic_tls_entry_t*>(s_dynamic_tls + 1),
-		};
 	}
 
 	return {
