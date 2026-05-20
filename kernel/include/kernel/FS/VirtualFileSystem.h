@@ -92,8 +92,9 @@ namespace Kernel
 		MountPoint* mount_from_root_inode(BAN::RefPtr<Inode>);
 
 	private:
-		Mutex					m_mutex;
 		BAN::RefPtr<FileSystem>	m_root_fs;
+
+		Mutex					m_mount_point_lock;
 		BAN::Vector<MountPoint>	m_mount_points;
 
 		friend class BAN::RefPtr<VirtualFileSystem>;

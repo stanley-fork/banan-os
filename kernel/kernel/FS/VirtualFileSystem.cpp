@@ -210,14 +210,14 @@ namespace Kernel
 		if (!file.inode->mode().ifdir())
 			return BAN::Error::from_errno(ENOTDIR);
 
-		LockGuard _(m_mutex);
+		LockGuard _(m_mount_point_lock);
 		TRY(m_mount_points.emplace_back(file_system, BAN::move(file)));
 		return {};
 	}
 
 	VirtualFileSystem::MountPoint* VirtualFileSystem::mount_from_host_inode(BAN::RefPtr<Inode> inode)
 	{
-		LockGuard _(m_mutex);
+		LockGuard _(m_mount_point_lock);
 		for (MountPoint& mount : m_mount_points)
 			if (*mount.host.inode == *inode)
 				return &mount;
@@ -226,7 +226,7 @@ namespace Kernel
 
 	VirtualFileSystem::MountPoint* VirtualFileSystem::mount_from_root_inode(BAN::RefPtr<Inode> inode)
 	{
-		LockGuard _(m_mutex);
+		LockGuard _(m_mount_point_lock);
 		for (MountPoint& mount : m_mount_points)
 			if (*mount.target->root_inode() == *inode)
 				return &mount;
@@ -235,8 +235,6 @@ namespace Kernel
 
 	BAN::ErrorOr<VirtualFileSystem::File> VirtualFileSystem::file_from_relative_path(BAN::RefPtr<Inode> root_inode, const File& parent, const Credentials& credentials, BAN::StringView path, int flags)
 	{
-		LockGuard _(m_mutex);
-
 		auto inode = parent.inode;
 		ASSERT(inode);
 
