@@ -564,12 +564,70 @@ namespace Kernel
 	{
 		ASSERT(vaddr % PAGE_SIZE == 0);
 
-		const size_t page_count = range_page_count(vaddr, size);
+		ASSERT(is_canonical(vaddr));
+		ASSERT(is_canonical(vaddr + size - 1));
+
+		const vaddr_t uc_vaddr_start = uncanonicalize(vaddr);
+		const vaddr_t uc_vaddr_end   = uncanonicalize(vaddr + size - 1);
+
+		uint16_t pml4e = (uc_vaddr_start >> 39) & 0x1FF;
+		uint16_t pdpte = (uc_vaddr_start >> 30) & 0x1FF;
+		uint16_t pde   = (uc_vaddr_start >> 21) & 0x1FF;
+		uint16_t pte   = (uc_vaddr_start >> 12) & 0x1FF;
+
+		const uint16_t e_pml4e = (uc_vaddr_end >> 39) & 0x1FF;
+		const uint16_t e_pdpte = (uc_vaddr_end >> 30) & 0x1FF;
+		const uint16_t e_pde   = (uc_vaddr_end >> 21) & 0x1FF;
+		const uint16_t e_pte   = (uc_vaddr_end >> 12) & 0x1FF;
 
 		SpinLockGuard _(m_lock);
-		for (vaddr_t page = 0; page < page_count; page++)
-			unmap_page(vaddr + page * PAGE_SIZE, false);
-		invalidate_range(vaddr, page_count, true);
+
+		uint64_t* pml4 = P2V(m_highest_paging_struct);
+		for (; pml4e <= e_pml4e; pml4e++)
+		{
+#define UNALLOCATE_TABLE_IF_EMPTY(outer, inner) \
+			if (old_##inner##e == 0 && inner##e == 512) { \
+				unallocate_page(outer[outer##e] & s_page_addr_mask); \
+				outer[outer##e] = 0; \
+			}
+			if (!(pml4[pml4e] & Flags::Present))
+				continue;
+			const uint16_t old_pdpte = pdpte;
+			uint64_t* pdpt = P2V(pml4[pml4e] & s_page_addr_mask);
+			for (; pdpte < 512; pdpte++)
+			{
+				if (pml4e == e_pml4e && pdpte > e_pdpte)
+					break;
+				if (!(pdpt[pdpte] & Flags::Present))
+					continue;
+				const uint16_t old_pde = pde;
+				uint64_t* pd = P2V(pdpt[pdpte] & s_page_addr_mask);
+				for (; pde < 512; pde++)
+				{
+					if (pml4e == e_pml4e && pdpte == e_pdpte && pde > e_pde)
+						break;
+					if (!(pd[pde] & Flags::Present))
+						continue;
+					const uint16_t old_pte = pte;
+					uint64_t* pt = P2V(pd[pde] & s_page_addr_mask);
+					for (; pte < 512; pte++)
+					{
+						if (pml4e == e_pml4e && pdpte == e_pdpte && pde == e_pde && pte > e_pte)
+							break;
+						pt[pte] = 0;
+					}
+					UNALLOCATE_TABLE_IF_EMPTY(pd, pt);
+					pte = 0;
+				}
+				UNALLOCATE_TABLE_IF_EMPTY(pdpt, pd);
+				pde = 0;
+			}
+			UNALLOCATE_TABLE_IF_EMPTY(pml4, pdpt);
+			pdpte = 0;
+#undef UNALLOCATE_TABLE_IF_EMPTY
+		}
+
+		invalidate_range(vaddr, range_page_count(vaddr, size), true);
 	}
 
 	void PageTable::map_page_at(paddr_t paddr, vaddr_t vaddr, flags_t flags, MemoryType memory_type, bool invalidate)
