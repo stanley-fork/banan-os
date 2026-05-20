@@ -221,6 +221,8 @@ namespace Kernel
 
 		BAN::ErrorOr<long> sys_load_keymap(const char* path);
 
+		BAN::ErrorOr<long> sys_banos_install(const char* object);
+
 		BAN::RefPtr<TTY> controlling_terminal() { return m_controlling_terminal; }
 
 		static Process& current() { return Thread::current().process(); }

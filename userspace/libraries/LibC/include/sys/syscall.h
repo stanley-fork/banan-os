@@ -117,6 +117,7 @@ __BEGIN_DECLS
 	O(SYS_SETGROUPS,		setgroups)		\
 	O(SYS_CHROOT,			chroot)			\
 	O(SYS_EVENTFD,			eventfd)		\
+    O(SYS_BANOS_INSTALL,    banos_install)  \
 
 enum Syscall
 {

@@ -41,7 +41,18 @@ SECTIONS
 	{
 		g_kernel_writable_start = .;
 		*(.data)
+
+		. = ALIGN(8);
+		g_drv_builtin_begin = .;
+		KEEP(*(.banos-driver))
+		g_drv_builtin_end = .;
+		. = ALIGN(8);
+		g_banos_export = .;
+		KEEP(*(.banos-export))
+		g_banos_export_end = .;
 	}
+
+
 	.bss ALIGN(4K) : AT(ADDR(.bss) - KERNEL_OFFSET)
 	{
 		g_kernel_bss_start = .;

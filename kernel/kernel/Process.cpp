@@ -22,6 +22,7 @@
 #include <kernel/Timer/Timer.h>
 #include <kernel/UserCopy.h>
 
+#include <kernel/Banos.h>
 #include <LibELF/AuxiliaryVector.h>
 
 #include <LibInput/KeyboardLayout.h>
@@ -3950,4 +3951,7 @@ namespace Kernel
 		return BAN::Error::from_errno(EFAULT);
 	}
 
+	BAN::ErrorOr<long> Process::sys_banos_install(const char* u_image) {
+		return TRY(Banos::load_driver_from_image(u_image));
+	}
 }

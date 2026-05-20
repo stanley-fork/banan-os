@@ -27,6 +27,7 @@
 #include <kernel/Terminal/VirtualTTY.h>
 #include <kernel/Timer/Timer.h>
 #include <kernel/USB/USBManager.h>
+#include <kernel/Banos.h>
 
 #include <LibInput/KeyboardLayout.h>
 
@@ -260,6 +261,8 @@ static void init2(void*)
 	Heap::get().release_boot_modules();
 
 	TTY::initialize_devices();
+
+	Banos::initialize_initial_drivers();
 
 	auto console_path = MUST(BAN::String::formatted("/dev/{}", cmdline.console));
 	auto console_path_sv = console_path.sv();

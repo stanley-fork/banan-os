@@ -11,6 +11,7 @@ set(KERNEL_SOURCES
 	kernel/Audio/Controller.cpp
 	kernel/Audio/HDAudio/AudioFunctionGroup.cpp
 	kernel/Audio/HDAudio/Controller.cpp
+	kernel/Banos.cpp
 	kernel/BootInfo.cpp
 	kernel/CPUID.cpp
 	kernel/Credentials.cpp
