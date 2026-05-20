@@ -57,6 +57,12 @@ namespace Kernel
 			};
 		};
 
+		struct LoadStats
+		{
+			uint64_t ns_idle;
+			uint64_t ns_total;
+		};
+
 	public:
 		static Processor& create(ProcessorID id);
 		static Processor& initialize();
@@ -71,9 +77,6 @@ namespace Kernel
 		static bool is_smp_enabled()  { return s_is_smp_enabled; }
 		static void set_smp_enabled() { s_is_smp_enabled = true; }
 		static void wait_until_processors_ready();
-
-		static void toggle_should_print_cpu_load() { s_should_print_cpu_load = !s_should_print_cpu_load; }
-		static bool get_should_print_cpu_load() { return s_should_print_cpu_load; }
 
 		static ProcessorID bsp_id() { return s_bsp_id; }
 		static bool current_is_bsp() { return current_id() == bsp_id(); }
@@ -115,6 +118,8 @@ namespace Kernel
 
 		static void* get_current_page_table()					{ return read_gs_sized<void*>(offsetof(Processor, m_current_page_table)); }
 		static void set_current_page_table(void* page_table)	{ write_gs_sized<void*>(offsetof(Processor, m_current_page_table), page_table); }
+
+		static LoadStats get_load_stats(size_t index);
 
 		static void yield();
 		static Scheduler& scheduler() { return *read_gs_sized<Scheduler*>(offsetof(Processor, m_scheduler)); }
@@ -187,7 +192,6 @@ namespace Kernel
 		static ProcessorID s_bsp_id;
 		static BAN::Atomic<uint8_t> s_processor_count;
 		static BAN::Atomic<bool>    s_is_smp_enabled;
-		static BAN::Atomic<bool>    s_should_print_cpu_load;
 		static paddr_t              s_shared_page_paddr;
 		static vaddr_t              s_shared_page_vaddr;
 
@@ -207,10 +211,9 @@ namespace Kernel
 
 		Scheduler* m_scheduler { nullptr };
 
-		uint64_t m_start_ns { 0 };
-		uint64_t m_idle_ns { 0 };
-		uint64_t m_last_update_ns { 0 };
-		uint64_t m_next_update_ns { 0 };
+		BAN::Atomic<bool> m_load_stat_lock;
+		uint64_t m_load_start_ns { 0 };
+		LoadStats m_load_stats {};
 
 		BAN::Atomic<SMPMessage*> m_smp_pending { nullptr };
 		BAN::Atomic<SMPMessage*> m_smp_free    { nullptr };

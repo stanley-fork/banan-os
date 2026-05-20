@@ -197,9 +197,6 @@ namespace Kernel
 					}
 					else switch (key_event.keycode)
 					{
-						case LibInput::keycode_function(1):
-							Processor::toggle_should_print_cpu_load();
-							break;
 						case LibInput::keycode_function(11):
 							DevFileSystem::get().initiate_disk_cache_drop();
 							break;
