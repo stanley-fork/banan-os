@@ -64,8 +64,8 @@ namespace Kernel
 				return BAN::Error::from_errno(ENOMEM);
 
 			m_page_table.map_page_at(paddr, vaddr, m_flags);
-			PageTable::with_fast_page(paddr, [] {
-				memset(PageTable::fast_page_as_ptr(), 0x00, PAGE_SIZE);
+			PageTable::with_per_cpu_fast_page(paddr, [](void* addr) {
+				memset(addr, 0x00, PAGE_SIZE);
 			});
 
 			return true;
@@ -93,8 +93,8 @@ namespace Kernel
 		m_page_table.map_page_at(paddr, vaddr, m_flags);
 
 		ASSERT(&m_page_table == &PageTable::current());
-		PageTable::with_fast_page(physical_page->paddr, [vaddr] {
-			memcpy(reinterpret_cast<void*>(vaddr), PageTable::fast_page_as_ptr(), PAGE_SIZE);
+		PageTable::with_per_cpu_fast_page(physical_page->paddr, [vaddr](void* addr) {
+			memcpy(reinterpret_cast<void*>(vaddr), addr, PAGE_SIZE);
 		});
 
 		if (--physical_page->ref_count == 0)
@@ -164,9 +164,9 @@ namespace Kernel
 		size_t written = 0;
 		while (written < buffer_size)
 		{
-			vaddr_t write_vaddr = m_vaddr + offset_into_region + written;
-			vaddr_t page_offset = write_vaddr % PAGE_SIZE;
-			size_t bytes = BAN::Math::min<size_t>(buffer_size - written, PAGE_SIZE - page_offset);
+			const vaddr_t write_vaddr = m_vaddr + offset_into_region + written;
+			const vaddr_t page_offset = write_vaddr % PAGE_SIZE;
+			const size_t bytes = BAN::Math::min<size_t>(buffer_size - written, PAGE_SIZE - page_offset);
 
 			if (!(m_page_table.get_page_flags(write_vaddr & PAGE_ADDR_MASK) & PageTable::ReadWrite))
 			{
@@ -180,8 +180,8 @@ namespace Kernel
 			const paddr_t paddr = m_page_table.physical_address_of(write_vaddr & PAGE_ADDR_MASK);
 			ASSERT(paddr);
 
-			PageTable::with_fast_page(paddr, [&] {
-				memcpy(PageTable::fast_page_as_ptr(page_offset), (void*)(buffer + written), bytes);
+			PageTable::with_per_cpu_fast_page(paddr, [&](void* addr) {
+				memcpy(static_cast<uint8_t*>(addr) + page_offset, (void*)(buffer + written), bytes);
 			});
 
 			written += bytes;

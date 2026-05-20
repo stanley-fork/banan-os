@@ -20,7 +20,9 @@
 #include <kernel/Storage/StorageDevice.h>
 #include <kernel/Terminal/PseudoTerminal.h>
 #include <kernel/Timer/Timer.h>
+#include <kernel/UserCopy.h>
 
+#include <kernel/Banos.h>
 #include <LibELF/AuxiliaryVector.h>
 
 #include <LibInput/KeyboardLayout.h>
@@ -481,6 +483,26 @@ namespace Kernel
 		}
 
 		return l;
+	}
+
+	BAN::ErrorOr<AddressRange> Process::find_free_address_range(size_t size)
+	{
+		if (auto rem = size % PAGE_SIZE)
+			size += PAGE_SIZE - rem;
+
+		vaddr_t vaddr = m_shared_page_vaddr ? m_shared_page_vaddr + PAGE_SIZE : 0x400000;
+		for (size_t i = find_mapped_region(vaddr); i < m_mapped_regions.size(); i++)
+		{
+			const auto& region = m_mapped_regions[i];
+			if (!region->overlaps(vaddr, size))
+				return AddressRange { vaddr, vaddr + size };
+
+			vaddr = region->vaddr() + region->size();
+			if (auto rem = vaddr % PAGE_SIZE)
+				vaddr += PAGE_SIZE - rem;
+		}
+
+		return BAN::Error::from_errno(ENOMEM);
 	}
 
 	size_t Process::proc_meminfo(off_t offset, BAN::ByteSpan buffer) const
@@ -2470,7 +2492,7 @@ namespace Kernel
 
 		RWLockWRGuard _(m_memory_region_lock);
 
-		AddressRange address_range { .start = 0x400000, .end = USERSPACE_END };
+		AddressRange address_range;
 		if (args.flags & (MAP_FIXED | MAP_FIXED_NOREPLACE))
 		{
 			const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr);
@@ -2509,22 +2531,30 @@ namespace Kernel
 				}
 			}
 		}
-		else if (const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr); vaddr == 0)
-			;
-		else if (vaddr % PAGE_SIZE)
-			;
-		else if (!PageTable::is_valid_pointer(vaddr))
-			;
-		else if (!PageTable::is_valid_pointer(vaddr + args.len))
-			;
-		else if (!page_table().is_range_free(vaddr, args.len))
-			;
 		else
 		{
-			address_range = {
-				.start = vaddr,
-				.end = vaddr + args.len,
-			};
+			bool use_address_hint = false;
+
+			const vaddr_t vaddr = reinterpret_cast<vaddr_t>(args.addr);
+			if (vaddr == 0 || vaddr % PAGE_SIZE)
+				;
+			else if (!PageTable::is_valid_pointer(vaddr))
+				;
+			else if (!PageTable::is_valid_pointer(vaddr + args.len))
+				;
+			else if (!page_table().is_range_free(vaddr, args.len))
+				;
+			else
+			{
+				use_address_hint = true;
+				address_range = {
+					.start = vaddr,
+					.end = vaddr + args.len,
+				};
+			}
+
+			if (!use_address_hint)
+				address_range = TRY(find_free_address_range(args.len));
 		}
 
 		if (args.flags & MAP_ANONYMOUS)
@@ -3857,47 +3887,6 @@ namespace Kernel
 		return region->allocate_page_containing(address, wants_write);
 	}
 
-	extern "C" bool safe_user_memcpy(void*, const void*, size_t);
-	extern "C" bool safe_user_strncpy(void*, const void*, size_t);
-
-	static inline bool is_valid_user_address(const void* user_addr, size_t size)
-	{
-		const vaddr_t user_vaddr = reinterpret_cast<vaddr_t>(user_addr);
-		if (BAN::Math::will_addition_overflow<vaddr_t>(user_vaddr, size))
-			return false;
-		if (user_vaddr + size > USERSPACE_END)
-			return false;
-		return true;
-	}
-
-	BAN::ErrorOr<void> Process::read_from_user(const void* user_addr, void* out, size_t size)
-	{
-		if (!is_valid_user_address(user_addr, size))
-			return BAN::Error::from_errno(EFAULT);
-		if (!safe_user_memcpy(out, user_addr, size))
-			return BAN::Error::from_errno(EFAULT);
-		return {};
-	}
-
-	BAN::ErrorOr<void> Process::read_string_from_user(const char* user_addr, char* out, size_t max_size)
-	{
-		max_size = BAN::Math::min<size_t>(max_size, USERSPACE_END - reinterpret_cast<vaddr_t>(user_addr));
-		if (!is_valid_user_address(user_addr, max_size))
-			return BAN::Error::from_errno(EFAULT);
-		if (!safe_user_strncpy(out, user_addr, max_size))
-			return BAN::Error::from_errno(EFAULT);
-		return {};
-	}
-
-	BAN::ErrorOr<void> Process::write_to_user(void* user_addr, const void* in, size_t size)
-	{
-		if (!is_valid_user_address(user_addr, size))
-			return BAN::Error::from_errno(EFAULT);
-		if (!safe_user_memcpy(user_addr, in, size))
-			return BAN::Error::from_errno(EFAULT);
-		return {};
-	}
-
 	BAN::ErrorOr<MemoryRegion*> Process::validate_and_pin_pointer_access(const void* ptr, size_t size, bool needs_write)
 	{
 		// TODO: allow pinning multiple regions?
@@ -3962,4 +3951,7 @@ namespace Kernel
 		return BAN::Error::from_errno(EFAULT);
 	}
 
+	BAN::ErrorOr<long> Process::sys_banos_install(const char* u_image) {
+		return TRY(Banos::load_driver_from_image(u_image));
+	}
 }

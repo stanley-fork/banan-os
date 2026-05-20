@@ -15,6 +15,12 @@ namespace Kernel
 	};
 
 	template<typename F>
+	concept with_per_cpu_fast_page_callback = requires(F func, void* addr)
+	{
+		requires BAN::is_same_v<decltype(func(addr)), void>;
+	};
+
+	template<typename F>
 	concept with_fast_page_callback_error = requires(F func)
 	{
 		requires BAN::is_same_v<decltype(func()), BAN::ErrorOr<void>>;
@@ -45,6 +51,10 @@ namespace Kernel
 			WriteThrough,
 		};
 
+		static constexpr bool full_tlb_flush_threshold = 32;
+
+		static constexpr size_t reserved_fast_pages = 0x10;
+
 	public:
 		static void initialize_fast_page();
 		static void initialize_and_load();
@@ -70,6 +80,18 @@ namespace Kernel
 			map_fast_page(paddr);
 			callback();
 			unmap_fast_page();
+		}
+
+		template<with_per_cpu_fast_page_callback F>
+		static void with_per_cpu_fast_page(paddr_t paddr, F callback)
+		{
+			const auto state = Processor::get_interrupt_state();
+			Processor::set_interrupt_state(InterruptState::Disabled);
+			const size_t index = Processor::current_index() + reserved_fast_pages;
+			void* addr = map_fast_page(index, paddr);
+			callback(addr);
+			unmap_fast_page(index);
+			Processor::set_interrupt_state(state);
 		}
 
 		template<with_fast_page_callback_error F>
@@ -123,8 +145,8 @@ namespace Kernel
 		bool is_page_free(vaddr_t) const;
 		bool is_range_free(vaddr_t, size_t bytes) const;
 
-		bool reserve_page(vaddr_t, bool only_free = true, bool invalidate = true);
-		bool reserve_range(vaddr_t, size_t bytes, bool only_free = true);
+		void reserve_page(vaddr_t);
+		void reserve_range(vaddr_t, size_t bytes);
 
 		vaddr_t reserve_free_page(vaddr_t first_address, vaddr_t last_address = UINTPTR_MAX);
 		vaddr_t reserve_free_contiguous_pages(size_t page_count, vaddr_t first_address, vaddr_t last_address = UINTPTR_MAX);
@@ -133,6 +155,7 @@ namespace Kernel
 
 		void invalidate_page(vaddr_t addr, bool send_smp_message) { invalidate_range(addr, 1, send_smp_message); }
 		void invalidate_range(vaddr_t addr, size_t pages, bool send_smp_message);
+		void invalidate_full_address_space(bool global);
 
 		InterruptState lock() const { return m_lock.lock(); }
 		void unlock(InterruptState state) const { m_lock.unlock(state); }

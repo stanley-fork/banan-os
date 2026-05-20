@@ -700,50 +700,16 @@ static void relocate_elf(LoadedElf& elf, bool lazy_load)
 		}
 		else
 		{
-			const size_t pltrelent = (elf.pltrel == DT_REL)
-				? sizeof(ElfNativeRelocation)
-				: sizeof(ElfNativeRelocationA);
-
-			for (size_t i = 0; i < elf.pltrelsz / pltrelent; i++)
+			switch (elf.pltrel)
 			{
-				const auto info = (elf.pltrel == DT_REL)
-					? reinterpret_cast<ElfNativeRelocation*>(elf.jmprel)[i].r_info
-					: reinterpret_cast<ElfNativeRelocationA*>(elf.jmprel)[i].r_info;
-				const auto offset = (elf.pltrel == DT_REL)
-					? reinterpret_cast<ElfNativeRelocation*>(elf.jmprel)[i].r_offset
-					: reinterpret_cast<ElfNativeRelocationA*>(elf.jmprel)[i].r_offset;
-
-#if defined(__x86_64__)
-				if (ELF64_R_TYPE(info) != R_X86_64_JUMP_SLOT)
-					print_error_and_exit("jmprel relocation not R_X86_64_JUMP_SLOT", 0);
-#elif defined(__i686__)
-				if (ELF32_R_TYPE(info) != R_386_JMP_SLOT)
-					print_error_and_exit("jmprel relocation not R_386_JMP_SLOT", 0);
-#else
-				#error "unsupported architecture"
-#endif
-
-				bool do_relocation = false;
-
-				if (const uint32_t symbol_index = ELF_R_SYM(info))
-				{
-					const auto& symbol = *reinterpret_cast<ElfNativeSymbol*>(elf.symtab + symbol_index * elf.syment);
-					const char* symbol_name = reinterpret_cast<const char*>(elf.strtab + symbol.st_name);
-					if (strcmp(symbol_name, "__tls_get_addr") == 0 || strcmp(symbol_name, "___tls_get_addr") == 0)
-						do_relocation = true;
-				}
-
-				if (!do_relocation)
-					*reinterpret_cast<uintptr_t*>(elf.base + offset) += elf.base;
-				else switch (elf.pltrel)
-				{
-					case DT_REL:
-						handle_relocation(elf, reinterpret_cast<ElfNativeRelocation*>(elf.jmprel)[i], true);
-						break;
-					case DT_RELA:
-						handle_relocation(elf, reinterpret_cast<ElfNativeRelocationA*>(elf.jmprel)[i], true);
-						break;
-				}
+				case DT_REL:
+					for (size_t i = 0; i < elf.pltrelsz / sizeof(ElfNativeRelocation); i++)
+						*reinterpret_cast<uintptr_t*>(elf.base + reinterpret_cast<ElfNativeRelocation*>(elf.jmprel)[i].r_offset) += elf.base;
+					break;
+				case DT_RELA:
+					for (size_t i = 0; i < elf.pltrelsz / sizeof(ElfNativeRelocationA); i++)
+						*reinterpret_cast<uintptr_t*>(elf.base + reinterpret_cast<ElfNativeRelocationA*>(elf.jmprel)[i].r_offset) += elf.base;
+					break;
 			}
 		}
 	}
@@ -1279,6 +1245,28 @@ static MasterTLS initialize_master_tls()
 		module_count++;
 	}
 
+	{
+		const sys_mmap_t mmap_args {
+			.addr = nullptr,
+			.len = sizeof(_dynamic_tls_t) + s_max_loaded_files * sizeof(_dynamic_tls_entry_t),
+			.prot = PROT_READ | PROT_WRITE,
+			.flags = MAP_ANONYMOUS | MAP_PRIVATE,
+			.fildes = -1,
+			.off = 0,
+		};
+
+		const auto ret = syscall(SYS_MMAP, &mmap_args);
+		if (ret < 0)
+			print_error_and_exit("failed to allocate dynamic TLS", ret);
+		s_dynamic_tls = reinterpret_cast<_dynamic_tls_t*>(ret);
+
+		*s_dynamic_tls = {
+			.lock = 0,
+			.entry_count = 0,
+			.entries = reinterpret_cast<_dynamic_tls_entry_t*>(s_dynamic_tls + 1),
+		};
+	}
+
 	if (module_count == 0)
 		return { .addr = nullptr, .size = 0, .module_count = 0 };
 
@@ -1327,28 +1315,6 @@ static MasterTLS initialize_master_tls()
 		elf.tls_addr = tls_buffer;
 		elf.tls_module = s_tls_module++;
 		elf.tls_offset = tls_offset;
-	}
-
-	{
-		const sys_mmap_t mmap_args {
-			.addr = nullptr,
-			.len = sizeof(_dynamic_tls_t) + s_max_loaded_files * sizeof(_dynamic_tls_entry_t),
-			.prot = PROT_READ | PROT_WRITE,
-			.flags = MAP_ANONYMOUS | MAP_PRIVATE,
-			.fildes = -1,
-			.off = 0,
-		};
-
-		const auto ret = syscall(SYS_MMAP, &mmap_args);
-		if (ret < 0)
-			print_error_and_exit("failed to allocate dynamic TLS", ret);
-		s_dynamic_tls = reinterpret_cast<_dynamic_tls_t*>(ret);
-
-		*s_dynamic_tls = {
-			.lock = 0,
-			.entry_count = 0,
-			.entries = reinterpret_cast<_dynamic_tls_entry_t*>(s_dynamic_tls + 1),
-		};
 	}
 
 	return {

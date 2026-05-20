@@ -26,8 +26,6 @@ namespace Kernel
 	constexpr uint64_t s_page_flag_mask = 0x8000000000000FFF;
 	constexpr uint64_t s_page_addr_mask = ~s_page_flag_mask;
 
-	static bool s_is_initialized = false;
-
 	static PageTable* s_kernel = nullptr;
 	static bool s_has_nxe = false;
 	static bool s_has_pge = false;
@@ -260,7 +258,11 @@ namespace Kernel
 
 		ASSERT(index < 512);
 		ASSERT(s_fast_page_pt);
-		ASSERT(s_fast_page_lock.current_processor_has_lock());
+
+		if (index < reserved_fast_pages)
+			ASSERT(s_fast_page_lock.current_processor_has_lock());
+		else
+			ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
 
 		ASSERT(!(s_fast_page_pt[index] & Flags::Present));
 		s_fast_page_pt[index] = paddr | Flags::ReadWrite | Flags::Present;
@@ -274,7 +276,11 @@ namespace Kernel
 	{
 		ASSERT(index < 512);
 		ASSERT(s_fast_page_pt);
-		ASSERT(s_fast_page_lock.current_processor_has_lock());
+
+		if (index < reserved_fast_pages)
+			ASSERT(s_fast_page_lock.current_processor_has_lock());
+		else
+			ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
 
 		ASSERT((s_fast_page_pt[index] & Flags::Present));
 		s_fast_page_pt[index] = 0;
@@ -341,32 +347,10 @@ namespace Kernel
 		const bool is_userspace = (vaddr < KERNEL_OFFSET);
 		if (is_userspace && this != &PageTable::current())
 			;
-		else if (pages <= 32 || !s_is_initialized)
-		{
-			for (size_t i = 0; i < pages; i++)
-				asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
-		}
-		else if (is_userspace || !s_has_pge)
-		{
-			asm volatile("movl %0, %%cr3" :: "r"(static_cast<uint32_t>(m_highest_paging_struct)));
-		}
-		else
-		{
-			asm volatile(
-				"movl %%cr4, %%eax;"
-
-				"andl $~0x80, %%eax;"
-				"movl %%eax, %%cr4;"
-
-				"movl %0, %%cr3;"
-
-				"orl $0x80, %%eax;"
-				"movl %%eax, %%cr4;"
-				:
-				: "r"(static_cast<uint32_t>(m_highest_paging_struct))
-				: "eax"
-			);
-		}
+		else if (pages >= full_tlb_flush_threshold)
+			invalidate_full_address_space(!is_userspace);
+		else for (size_t i = 0; i < pages; i++)
+			asm volatile("invlpg (%0)" :: "r"(vaddr + i * PAGE_SIZE));
 
 		if (send_smp_message)
 		{
@@ -378,6 +362,34 @@ namespace Kernel
 					.page_table = vaddr < KERNEL_OFFSET ? this : nullptr,
 				}
 			});
+		}
+	}
+
+	void PageTable::invalidate_full_address_space(bool global)
+	{
+		if (!global || !s_has_pge)
+		{
+			asm volatile(
+				"movl %%cr3, %%eax;"
+				"movl %%eax, %%cr3;"
+				::: "eax"
+			);
+		}
+		else
+		{
+			asm volatile(
+				"movl %%cr4, %%eax;"
+
+				"andl $~0x80, %%eax;"
+				"movl %%eax, %%cr4;"
+
+				"movl %%cr3, %%ecx;"
+				"movl %%ecx, %%cr3;"
+
+				"orl $0x80, %%eax;"
+				"movl %%eax, %%cr4;"
+				::: "eax", "ecx"
+			);
 		}
 	}
 
@@ -597,30 +609,24 @@ namespace Kernel
 		return true;
 	}
 
-	bool PageTable::reserve_page(vaddr_t vaddr, bool only_free, bool send_smp_message)
+	void PageTable::reserve_page(vaddr_t vaddr)
 	{
-		SpinLockGuard _(m_lock);
 		ASSERT(vaddr % PAGE_SIZE == 0);
-		if (only_free && !is_page_free(vaddr))
-			return false;
-		map_page_at(0, vaddr, Flags::Reserved, MemoryType::Normal, send_smp_message);
-		return true;
+		SpinLockGuard _(m_lock);
+		ASSERT(is_page_free(vaddr));
+		map_page_at(0, vaddr, Flags::Reserved, MemoryType::Normal, false);
 	}
 
-	bool PageTable::reserve_range(vaddr_t vaddr, size_t bytes, bool only_free)
+	void PageTable::reserve_range(vaddr_t vaddr, size_t bytes)
 	{
 		if (size_t rem = bytes % PAGE_SIZE)
 			bytes += PAGE_SIZE - rem;
 		ASSERT(vaddr % PAGE_SIZE == 0);
 
 		SpinLockGuard _(m_lock);
-		if (only_free && !is_range_free(vaddr, bytes))
-			return false;
+		ASSERT(is_range_free(vaddr, bytes));
 		for (size_t offset = 0; offset < bytes; offset += PAGE_SIZE)
-			reserve_page(vaddr + offset, true, false);
-		invalidate_range(vaddr, bytes / PAGE_SIZE, true);
-
-		return true;
+			reserve_page(vaddr + offset);
 	}
 
 	vaddr_t PageTable::reserve_free_page(vaddr_t first_address, vaddr_t last_address)
@@ -675,7 +681,7 @@ namespace Kernel
 					vaddr |= (vaddr_t)pdpte << 30;
 					vaddr |= (vaddr_t)pde   << 21;
 					vaddr |= (vaddr_t)pte   << 12;
-					ASSERT(reserve_page(vaddr));
+					reserve_page(vaddr);
 					return vaddr;
 				}
 				unmap_fast_page(2);
@@ -693,7 +699,7 @@ namespace Kernel
 		{
 			if (is_page_free(vaddr))
 			{
-				ASSERT(reserve_page(vaddr));
+				reserve_page(vaddr);
 				return vaddr;
 			}
 		}
@@ -726,7 +732,7 @@ namespace Kernel
 			}
 			if (valid)
 			{
-				ASSERT(reserve_range(vaddr, page_count * PAGE_SIZE));
+				reserve_range(vaddr, page_count * PAGE_SIZE);
 				return vaddr;
 			}
 		}

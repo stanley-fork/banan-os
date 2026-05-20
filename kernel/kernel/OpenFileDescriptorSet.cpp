@@ -4,6 +4,7 @@
 #include <kernel/Networking/NetworkManager.h>
 #include <kernel/OpenFileDescriptorSet.h>
 #include <kernel/Process.h>
+#include <kernel/UserCopy.h>
 
 #include <fcntl.h>
 #include <sys/file.h>
@@ -254,7 +255,7 @@ namespace Kernel
 		if (cmd == F_SETLK || cmd == F_SETLKW || cmd == F_GETLK)
 		{
 			struct flock flock;
-			TRY(Process::current().read_from_user(reinterpret_cast<void*>(extra), &flock, sizeof(struct flock)));
+			TRY(read_from_user(reinterpret_cast<void*>(extra), &flock, sizeof(struct flock)));
 			flock.l_pid = Process::current().pid();
 
 			BAN::RefPtr<Inode> inode;
@@ -307,7 +308,7 @@ namespace Kernel
 			}
 
 			if (cmd == F_GETLK)
-				TRY(Process::current().write_to_user(reinterpret_cast<void*>(extra), &flock, sizeof(struct flock)));
+				TRY(write_to_user(reinterpret_cast<void*>(extra), &flock, sizeof(struct flock)));
 			return 0;
 		}
 

@@ -5,6 +5,7 @@
 #include <kernel/Memory/FileBackedRegion.h>
 
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/statvfs.h>
 
 namespace Kernel
@@ -317,7 +318,22 @@ namespace Kernel
 
 	BAN::ErrorOr<long> Inode::ioctl(int request, void* arg)
 	{
-		return ioctl_impl(request, arg);
+		auto ret = ioctl_impl(request, arg);
+		if (!ret.is_error() || ret.error().get_error_code() != ENOTSUP)
+			return BAN::move(ret);
+
+		switch (request)
+		{
+			case TIOCGWINSZ:
+			case TIOCSWINSZ:
+			case TCGETS:
+			case TCSETS:
+			case TCSETSW:
+			case TCSETSF:
+				return BAN::Error::from_errno(EINVAL);
+			default:
+				return BAN::Error::from_errno(ENOTSUP);
+		}
 	}
 
 	BAN::ErrorOr<void> Inode::add_epoll(class Epoll* epoll)

@@ -5,6 +5,7 @@
 #include <kernel/Device/DeviceNumbers.h>
 #include <kernel/FS/DevFS/FileSystem.h>
 #include <kernel/FS/VirtualFileSystem.h>
+#include <kernel/Input/InputDevice.h>
 #include <kernel/Lock/LockGuard.h>
 #include <kernel/Lock/SpinLockAsMutex.h>
 #include <kernel/Process.h>
@@ -117,40 +118,9 @@ namespace Kernel
 		return {};
 	}
 
-	void TTY::keyboard_task(void*)
-	{
-		BAN::RefPtr<Inode> keyboard_inode;
-		if (auto ret = DevFileSystem::get().root_inode()->find_inode("keyboard"_sv); !ret.is_error())
-			keyboard_inode = ret.release_value();
-		else
-		{
-			dprintln("could not open keyboard device: {}", ret.error());
-			return;
-		}
-
-		while (true)
-		{
-			while (TTY::current()->m_tty_ctrl.receive_input)
-			{
-				if (!keyboard_inode->can_read())
-				{
-					SystemTimer::get().sleep_ms(1);
-					continue;
-				}
-
-				LibInput::RawKeyEvent event;
-				[[maybe_unused]] const size_t read = MUST(keyboard_inode->read(0, BAN::ByteSpan::from(event)));
-				ASSERT(read == sizeof(event));
-
-				TTY::current()->on_key_event(LibInput::KeyboardLayout::get().key_event_from_raw(event));
-			}
-		}
-	}
-
 	void TTY::initialize_devices()
 	{
-		auto* thread = MUST(Thread::create_kernel(&TTY::keyboard_task, nullptr));
-		MUST(Processor::scheduler().add_thread(thread));
+		MUST(KeyboardDevice::initialize_tty_thread());
 
 		DevFileSystem::get().add_inode("tty", MUST(DevTTY::create(0666, 0, 0)));
 	}
@@ -268,7 +238,7 @@ namespace Kernel
 		if (ch == _POSIX_VDISABLE)
 			return;
 
-		LockGuard _0(m_mutex);
+		LockGuard _(m_mutex);
 
 		const auto termios = get_termios();
 

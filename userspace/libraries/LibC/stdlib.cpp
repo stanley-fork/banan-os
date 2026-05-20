@@ -809,7 +809,7 @@ static qsort_pair qsort_partition(uint8_t* pbegin, uint8_t* pend, size_t width, 
 
 	while (eq < gt)
 	{
-		const int comp = compar(eq, pivot);
+		const int comp = (eq == pivot) ? 0 : compar(eq, pivot);
 
 		if (comp < 0)
 		{

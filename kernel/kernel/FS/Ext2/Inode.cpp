@@ -230,12 +230,10 @@ namespace Kernel
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= UINT32_MAX || buffer.size() >= UINT32_MAX || buffer.size() >= (size_t)(UINT32_MAX - offset))
 			return BAN::Error::from_errno(EOVERFLOW);
 
-		RWLockRDGuard _0(m_lock);
+		RWLockRDGuard _(m_lock);
 
 		if (static_cast<BAN::make_unsigned_t<decltype(offset)>>(offset) >= static_cast<size_t>(m_size))
 			return 0;
-
-		ScopedSync _1(*this);
 
 		uint32_t count = buffer.size();
 		if (offset + buffer.size() > static_cast<size_t>(m_size))
@@ -283,7 +281,7 @@ namespace Kernel
 		if (static_cast<size_t>(m_size) < offset + buffer.size())
 			TRY(truncate_impl(offset + buffer.size()));
 
-		ScopedSync _(*this);
+		ScopedSync _1(*this);
 
 		const uint32_t block_size = blksize();
 

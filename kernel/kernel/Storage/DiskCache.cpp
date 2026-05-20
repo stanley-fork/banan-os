@@ -66,8 +66,8 @@ namespace Kernel
 		if (!(cache.sector_mask & (1 << page_cache_offset)))
 			return false;
 
-		PageTable::with_fast_page(cache.paddr, [&] {
-			memcpy(buffer.data(), PageTable::fast_page_as_ptr(page_cache_offset * m_sector_size), m_sector_size);
+		PageTable::with_per_cpu_fast_page(cache.paddr, [&](void* addr) {
+			memcpy(buffer.data(), static_cast<uint8_t*>(addr) + page_cache_offset * m_sector_size, m_sector_size);
 		});
 
 		return true;
@@ -107,8 +107,8 @@ namespace Kernel
 
 		auto& cache = m_cache[index];
 
-		PageTable::with_fast_page(cache.paddr, [&] {
-			memcpy(PageTable::fast_page_as_ptr(page_cache_offset * m_sector_size), buffer.data(), m_sector_size);
+		PageTable::with_per_cpu_fast_page(cache.paddr, [&](void* addr) {
+			memcpy(static_cast<uint8_t*>(addr) + page_cache_offset * m_sector_size, buffer.data(), m_sector_size);
 		});
 
 		cache.sector_mask |= 1 << page_cache_offset;
@@ -133,8 +133,8 @@ namespace Kernel
 			if (cache.dirty_mask == 0)
 				return {};
 
-			PageTable::with_fast_page(cache.paddr, [&] {
-				memcpy(m_sync_cache.data(), PageTable::fast_page_as_ptr(), PAGE_SIZE);
+			PageTable::with_per_cpu_fast_page(cache.paddr, [&](void* addr) {
+				memcpy(m_sync_cache.data(), addr, PAGE_SIZE);
 			});
 
 			temp_cache = cache;

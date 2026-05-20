@@ -61,6 +61,7 @@ namespace Kernel
 	{
 	public:
 		static BAN::ErrorOr<BAN::RefPtr<KeyboardDevice>> create(mode_t mode, uid_t uid, gid_t gid);
+		static BAN::ErrorOr<void> initialize_tty_thread();
 
 		void notify();
 

@@ -29,6 +29,13 @@ namespace Kernel
 		BAN_NON_MOVABLE(Processor);
 
 	public:
+		struct TLBEntry
+		{
+			vaddr_t vaddr;
+			size_t page_count;
+			class PageTable* page_table;
+		};
+
 		struct SMPMessage
 		{
 			enum class Type
@@ -43,12 +50,7 @@ namespace Kernel
 			Type type;
 			union
 			{
-				struct
-				{
-					uintptr_t vaddr;
-					size_t page_count;
-					void* page_table;
-				} flush_tlb;
+				TLBEntry flush_tlb;
 				SchedulerQueue::Node* new_thread;
 				SchedulerQueue::Node* unblock_thread;
 				bool dummy;
@@ -130,7 +132,7 @@ namespace Kernel
 		static void handle_ipi();
 
 		static void handle_smp_messages();
-		static void send_smp_message(ProcessorID, const SMPMessage&, bool send_ipi = true);
+		static bool send_smp_message(ProcessorID, const SMPMessage&, bool send_ipi = true);
 		static void broadcast_smp_message(const SMPMessage&);
 
 		static void load_segments();
@@ -178,6 +180,9 @@ namespace Kernel
 			asm volatile("mov %[value], %%gs:%a[offset]" :: [value]"r"(value), [offset]"ir"(offset) : "memory");
 		}
 
+		void lock_tlb_lock();
+		void unlock_tlb_lock();
+
 	private:
 		static ProcessorID s_bsp_id;
 		static BAN::Atomic<uint8_t> s_processor_count;
@@ -210,6 +215,11 @@ namespace Kernel
 		BAN::Atomic<SMPMessage*> m_smp_pending { nullptr };
 		BAN::Atomic<SMPMessage*> m_smp_free    { nullptr };
 		SMPMessage* m_smp_message_storage { nullptr };
+
+		BAN::Atomic<bool> m_tlb_lock { false };
+		size_t m_tlb_entry_count { 0 };
+		BAN::Array<TLBEntry, 32> m_tlb_entries;
+		bool m_tlb_global { false };
 
 		void* m_current_page_table { nullptr };
 

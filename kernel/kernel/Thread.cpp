@@ -9,6 +9,7 @@
 #include <kernel/Scheduler.h>
 #include <kernel/Thread.h>
 #include <kernel/Timer/Timer.h>
+#include <kernel/UserCopy.h>
 
 namespace Kernel
 {
@@ -727,7 +728,7 @@ namespace Kernel
 				{
 					static_assert(sizeof(T) >= sizeof(uintptr_t));
 					sp -= sizeof(T);
-					if (m_process->write_to_user(reinterpret_cast<void*>(sp), &value, sizeof(T)).is_error())
+					if (write_to_user(reinterpret_cast<void*>(sp), &value, sizeof(T)).is_error())
 						m_process->exit(128 + SIGSEGV, SIGSEGV | 0x80);
 				};
 

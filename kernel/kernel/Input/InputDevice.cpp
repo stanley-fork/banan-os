@@ -1,7 +1,10 @@
+#include <BAN/CircularQueue.h>
+
 #include <kernel/Device/DeviceNumbers.h>
 #include <kernel/FS/DevFS/FileSystem.h>
 #include <kernel/Input/InputDevice.h>
 #include <kernel/Lock/SpinLockAsMutex.h>
+#include <kernel/Terminal/TTY.h>
 
 #include <LibInput/Joystick.h>
 #include <LibInput/KeyEvent.h>
@@ -23,6 +26,10 @@ namespace Kernel
 
 	static SpinLock s_joystick_lock;
 	static BAN::Vector<BAN::WeakPtr<InputDevice>> s_joysticks;
+
+	static SpinLock s_tty_keyboard_event_lock;
+	static ThreadBlocker s_tty_keyboard_event_blocker;
+	static BAN::CircularQueue<LibInput::RawKeyEvent, 128> s_tty_keyboard_events;
 
 	static const char* get_name_format(InputDevice::Type type)
 	{
@@ -201,6 +208,15 @@ namespace Kernel
 							break;
 					}
 				}
+
+				if (TTY::current()->should_receive_input())
+				{
+					SpinLockGuard _(s_tty_keyboard_event_lock);
+					if (!s_tty_keyboard_events.full())
+						s_tty_keyboard_events.push(key_event);
+					s_tty_keyboard_event_blocker.unblock();
+					return;
+				}
 			}
 
 			if (m_event_count == m_max_event_count)
@@ -261,6 +277,41 @@ namespace Kernel
 	}
 
 
+	static void tty_keyboard_thread(void*)
+	{
+		static BAN::Atomic<bool> initialized = false;
+		[[maybe_unused]] bool old_initialized = initialized.exchange(true);
+		ASSERT(old_initialized == false);
+
+		for (;;)
+		{
+			LibInput::RawKeyEvent event;
+
+			{
+				SpinLockGuard guard(s_tty_keyboard_event_lock);
+
+				if (s_tty_keyboard_events.empty())
+				{
+					SpinLockGuardAsMutex smutex(guard);
+					s_tty_keyboard_event_blocker.block_indefinite(&smutex);
+					continue;
+				}
+
+				event = s_tty_keyboard_events.front();
+				s_tty_keyboard_events.pop();
+			}
+
+			TTY::current()->on_key_event(event);
+		}
+	}
+
+	BAN::ErrorOr<void> KeyboardDevice::initialize_tty_thread()
+	{
+		auto* thread = TRY(Thread::create_kernel(tty_keyboard_thread, nullptr));
+		ASSERT(thread);
+		TRY(Processor::scheduler().add_thread(thread));
+		return {};
+	}
 
 	BAN::ErrorOr<BAN::RefPtr<KeyboardDevice>> KeyboardDevice::create(mode_t mode, uid_t uid, gid_t gid)
 	{

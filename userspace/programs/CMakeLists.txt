@@ -57,6 +57,7 @@ set(USERSPACE_PROGRAMS
 	whoami
 	WindowServer
 	yes
+	driver-install
 )
 
 foreach(project ${USERSPACE_PROGRAMS})
