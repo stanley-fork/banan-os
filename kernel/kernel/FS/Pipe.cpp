@@ -268,19 +268,4 @@ namespace Kernel
 		return BAN::Error::from_errno(ENODEV);
 	}
 
-	BAN::ErrorOr<long> Pipe::ioctl_impl(int cmd, void* arg)
-	{
-		switch (cmd)
-		{
-			case TIOCGWINSZ:
-			case TIOCSWINSZ:
-			case TCGETS:
-			case TCSETS:
-			case TCSETSW:
-			case TCSETSF:
-				return BAN::Error::from_errno(EINVAL);
-		}
-		return Inode::ioctl_impl(cmd, arg);
-	}
-
 }
