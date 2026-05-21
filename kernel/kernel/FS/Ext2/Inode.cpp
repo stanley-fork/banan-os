@@ -870,6 +870,8 @@ needs_new_block:
 			}
 		}
 
+		dir_cache_remove(name);
+
 		return {};
 	}
 
@@ -926,6 +928,9 @@ needs_new_block:
 	{
 		ASSERT(mode().ifdir());
 
+		if (auto cached = dir_cache_find(file_name))
+			return cached;
+
 		auto block_buffer = TRY(m_fs.get_block_buffer());
 
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
@@ -941,11 +946,74 @@ needs_new_block:
 				auto& entry = entry_span.as<const Ext2::LinkedDirectoryEntry>();
 				BAN::StringView entry_name(entry.name, entry.name_len);
 				if (entry.inode && entry_name == file_name)
-					return BAN::RefPtr<Inode>(TRY(m_fs.open_inode(entry.inode)));
+				{
+					auto inode = BAN::RefPtr<Inode>(TRY(m_fs.open_inode(entry.inode)));
+					dir_cache_add(file_name, inode);
+					return inode;
+				}
 				entry_span = entry_span.slice(entry.rec_len);
 			}
 		}
 
 		return BAN::Error::from_errno(ENOENT);
 	}
+
+	BAN::RefPtr<Inode> Ext2Inode::dir_cache_find(BAN::StringView name) const
+	{
+		RWLockRDGuard _(m_dir_cache_lock);
+		for (const auto& cache : m_dir_cache)
+		{
+			if (!cache.inode || name != BAN::StringView(cache.name, cache.name_len))
+				continue;
+			BAN::atomic_add_fetch(cache.freq, 1);
+			return cache.inode;
+		}
+		return {};
+	}
+
+	void Ext2Inode::dir_cache_remove(BAN::StringView name)
+	{
+		RWLockWRGuard _(m_dir_cache_lock);
+		for (auto& cache : m_dir_cache)
+		{
+			if (!cache.inode || name != BAN::StringView(cache.name, cache.name_len))
+				continue;
+			cache.freq = 0;
+			cache.inode = {};
+			return;
+		}
+	}
+
+	void Ext2Inode::dir_cache_add(BAN::StringView name, BAN::RefPtr<Inode> inode)
+	{
+		RWLockWRGuard _(m_dir_cache_lock);
+
+		if (m_dir_cache.empty() && m_dir_cache.resize(dir_cache_size).is_error())
+			return;
+
+		size_t min_freq = BAN::numeric_limits<size_t>::max();
+		size_t min_index = 0;
+		for (size_t i = 0; i < m_dir_cache.size(); i++)
+		{
+			const auto& cache = m_dir_cache[i];
+			if (cache.inode && name == BAN::StringView(cache.name, cache.name_len))
+			{
+				ASSERT(cache.inode == inode);
+				cache.freq++;
+				return;
+			}
+			if (cache.freq < min_freq)
+			{
+				min_freq  = cache.freq;
+				min_index = i;
+			}
+		}
+
+		auto& cache = m_dir_cache[min_index];
+		cache.freq     = 1;
+		cache.inode    = inode;
+		cache.name_len = name.size();
+		memcpy(cache.name, name.data(), name.size());
+	}
+
 }

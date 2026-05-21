@@ -71,6 +71,10 @@ namespace Kernel
 	private:
 		Ext2Inode(Ext2FS& fs, Ext2::Inode inode, uint32_t ino);
 
+		BAN::RefPtr<Inode> dir_cache_find(BAN::StringView) const;
+		void dir_cache_remove(BAN::StringView);
+		void dir_cache_add(BAN::StringView, BAN::RefPtr<Inode>);
+
 	private:
 		struct ScopedSync
 		{
@@ -104,6 +108,17 @@ namespace Kernel
 		const uint32_t m_og_dir_acl;
 		const uint32_t m_og_faddr;
 		const Ext2::Osd2 m_og_osd2;
+
+		struct DirCacheEntry
+		{
+			mutable size_t freq { 0 };
+			BAN::RefPtr<Inode> inode;
+			size_t name_len { 0 };
+			char   name[256];
+		};
+		static constexpr size_t dir_cache_size = 32;
+		mutable RWLock m_dir_cache_lock;
+		BAN::Vector<DirCacheEntry> m_dir_cache;
 
 		friend class Ext2FS;
 		friend class BAN::RefPtr<Ext2Inode>;
