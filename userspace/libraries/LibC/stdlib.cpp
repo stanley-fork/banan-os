@@ -475,31 +475,36 @@ int system(const char* command)
 	return stat_val;
 }
 
-static size_t temp_template_count_x(const char* _template)
+static void randomize_temp(char* buffer)
 {
-	const size_t len = strlen(_template);
-	for (size_t i = 0; i < len; i++)
-		if (_template[len - i - 1] != 'X')
-			return i;
-	return len;
+	// FIXME: don't use rand()
+	const uint32_t value = rand() & 0xFFFFFF;
+	sprintf(buffer, "%06x", value);
 }
 
-static void generate_temp_template(char* _template, size_t x_count)
+static char* validate_temp_template(char* _template, int suffixlen)
 {
-	const size_t len = strlen(_template);
-	for (size_t i = 0; i < x_count; i++)
+	const size_t length = strlen(_template);
+	if (suffixlen < 0 || length < static_cast<size_t>(suffixlen + 6))
 	{
-		const uint8_t nibble = rand() & 0xF;
-		_template[len - i - 1] = (nibble < 10)
-			? ('0' + nibble)
-			: ('a' + nibble - 10);
+		errno = EINVAL;
+		return nullptr;
 	}
+
+	char* xptr = _template + length - suffixlen - 6;
+	if (memcmp(xptr, "XXXXXX", 6) != 0)
+	{
+		errno = EINVAL;
+		return nullptr;
+	}
+
+	return xptr;
 }
 
 char* mktemp(char* _template)
 {
-	const size_t x_count = temp_template_count_x(_template);
-	if (x_count < 6)
+	char* xptr = validate_temp_template(_template, 0);
+	if (xptr == nullptr)
 	{
 		errno = EINVAL;
 		_template[0] = '\0';
@@ -508,18 +513,22 @@ char* mktemp(char* _template)
 
 	for (;;)
 	{
-		generate_temp_template(_template, x_count);
+		randomize_temp(xptr);
 
 		struct stat st;
-		if (stat(_template, &st) == 0)
+		if (stat(_template, &st) == -1)
+		{
+			if (errno != ENOENT)
+				_template[0] = '\0';
 			return _template;
+		}
 	}
 }
 
 char* mkdtemp(char* _template)
 {
-	const size_t x_count = temp_template_count_x(_template);
-	if (x_count < 6)
+	char* xptr = validate_temp_template(_template, 0);
+	if (xptr == nullptr)
 	{
 		errno = EINVAL;
 		return nullptr;
@@ -527,8 +536,7 @@ char* mkdtemp(char* _template)
 
 	for (;;)
 	{
-		generate_temp_template(_template, x_count);
-
+		randomize_temp(xptr);
 		if (mkdir(_template, S_IRUSR | S_IWUSR | S_IXUSR) != -1)
 			return _template;
 		if (errno != EEXIST)
@@ -538,8 +546,26 @@ char* mkdtemp(char* _template)
 
 int mkstemp(char* _template)
 {
-	const size_t x_count = temp_template_count_x(_template);
-	if (x_count < 6)
+	return mkostemps(_template, 0, 0);
+}
+
+int mkostemp(char* _template, int flags)
+{
+	return mkostemps(_template, 0, flags);
+}
+
+int mkstemps(char* _template, int suffixlen)
+{
+	return mkostemps(_template, suffixlen, 0);
+}
+
+int mkostemps(char* _template, int suffixlen, int flags)
+{
+	flags &= O_APPEND | O_CLOEXEC | O_SYNC;
+	flags |= O_RDWR | O_CREAT | O_EXCL;
+
+	char* xptr = validate_temp_template(_template, suffixlen);
+	if (xptr == nullptr)
 	{
 		errno = EINVAL;
 		return -1;
@@ -547,10 +573,8 @@ int mkstemp(char* _template)
 
 	for (;;)
 	{
-		generate_temp_template(_template, x_count);
-
-		int fd = open(_template, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-		if (fd != -1)
+		randomize_temp(xptr);
+		if (int fd = open(_template, flags, 0600); fd != -1)
 			return fd;
 		if (errno != EEXIST)
 			return -1;
