@@ -110,83 +110,20 @@ namespace Kernel
 
 	BAN::ErrorOr<long> NetworkSocket::ioctl_impl(int request, void* arg)
 	{
-		if (!arg)
-		{
-			dprintln("No argument provided");
-			return BAN::Error::from_errno(EINVAL);
-		}
-
-		auto interface = TRY(this->interface(nullptr, 0));
-		auto* ifreq = reinterpret_cast<struct ifreq*>(arg);
-
 		switch (request)
 		{
 			case SIOCGIFADDR:
-			{
-				auto& ifru_addr = *reinterpret_cast<sockaddr_in*>(&ifreq->ifr_ifru.ifru_addr);
-				ifru_addr.sin_family = AF_INET;
-				ifru_addr.sin_addr.s_addr = interface->get_ipv4_address().raw;
-				return 0;
-			}
 			case SIOCSIFADDR:
-			{
-				auto& ifru_addr = *reinterpret_cast<const sockaddr_in*>(&ifreq->ifr_ifru.ifru_addr);
-				if (ifru_addr.sin_family != AF_INET)
-					return BAN::Error::from_errno(EADDRNOTAVAIL);
-				interface->set_ipv4_address(BAN::IPv4Address { ifru_addr.sin_addr.s_addr });
-				dprintln("IPv4 address set to {}", interface->get_ipv4_address());
-				return 0;
-			}
 			case SIOCGIFNETMASK:
-			{
-				auto& ifru_netmask = *reinterpret_cast<sockaddr_in*>(&ifreq->ifr_ifru.ifru_netmask);
-				ifru_netmask.sin_family = AF_INET;
-				ifru_netmask.sin_addr.s_addr = interface->get_netmask().raw;
-				return 0;
-			}
 			case SIOCSIFNETMASK:
-			{
-				auto& ifru_netmask = *reinterpret_cast<const sockaddr_in*>(&ifreq->ifr_ifru.ifru_netmask);
-				if (ifru_netmask.sin_family != AF_INET)
-					return BAN::Error::from_errno(EADDRNOTAVAIL);
-				interface->set_netmask(BAN::IPv4Address { ifru_netmask.sin_addr.s_addr });
-				dprintln("Netmask set to {}", interface->get_netmask());
-				return 0;
-			}
 			case SIOCGIFGWADDR:
-			{
-				auto& ifru_gwaddr = *reinterpret_cast<sockaddr_in*>(&ifreq->ifr_ifru.ifru_gwaddr);
-				ifru_gwaddr.sin_family = AF_INET;
-				ifru_gwaddr.sin_addr.s_addr = interface->get_gateway().raw;
-				return 0;
-			}
 			case SIOCSIFGWADDR:
-			{
-				auto& ifru_gwaddr = *reinterpret_cast<const sockaddr_in*>(&ifreq->ifr_ifru.ifru_gwaddr);
-				if (ifru_gwaddr.sin_family != AF_INET)
-					return BAN::Error::from_errno(EADDRNOTAVAIL);
-				interface->set_gateway(BAN::IPv4Address { ifru_gwaddr.sin_addr.s_addr });
-				dprintln("Gateway set to {}", interface->get_gateway());
-				return 0;
-			}
 			case SIOCGIFHWADDR:
-			{
-				auto mac_address = interface->get_mac_address();
-				ifreq->ifr_ifru.ifru_hwaddr.sa_family = AF_INET;
-				memcpy(ifreq->ifr_ifru.ifru_hwaddr.sa_data, &mac_address, sizeof(mac_address));
-				return 0;
-			}
 			case SIOCGIFNAME:
-			{
-				auto& ifrn_name = ifreq->ifr_ifrn.ifrn_name;
-				ASSERT(interface->name().size() < sizeof(ifrn_name));
-				memcpy(ifrn_name, interface->name().data(), interface->name().size());
-				ifrn_name[interface->name().size()] = '\0';
-				return 0;
-			}
-			default:
-				return BAN::Error::from_errno(EINVAL);
+				return TRY(interface(nullptr, 0))->ioctl(request, arg);
 		}
+
+		return Socket::ioctl_impl(request, arg);
 	}
 
 	BAN::ErrorOr<void> NetworkSocket::getsockname_impl(sockaddr* address, socklen_t* address_len)
