@@ -14,5 +14,5 @@ build() {
 }
 
 install() {
-    ./waf install --destdir=$BANAN_SYSROOT/home/user/halflife || exit 1
+	./waf install --destdir="$DESTDIR/home/user/halflife" || exit 1
 }

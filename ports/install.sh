@@ -250,6 +250,7 @@ if (( $needs_compile )); then
 	sha256sum "$BANAN_SYSROOT/usr/lib/libc.a" > "../.compile_hash"
 fi
 
+DESTDIR="$BANAN_SYSROOT"
 pre_install
 install
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"

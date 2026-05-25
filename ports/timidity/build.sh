@@ -19,9 +19,10 @@ post_install() {
 	fi
 
 	eawpats_dir="/usr/share/eawpats"
-	mkdir -p "$BANAN_SYSROOT/$eawpats_dir"
-	unzip -qod "$BANAN_SYSROOT/$eawpats_dir" ../eawpats.zip
+	mkdir -p "$DESTDIR/$eawpats_dir"
+	unzip -qod "$DESTDIR/$eawpats_dir" ../eawpats.zip
 
-	cp "$BANAN_SYSROOT/$eawpats_dir/timidity.cfg" "$BANAN_SYSROOT/etc/"
-	sed -i "s|^dir .*$|dir $eawpats_dir|g" "$BANAN_SYSROOT/etc/timidity.cfg"
+	mkdir -p "$DESTDIR/etc"
+	cp "$DESTDIR/$eawpats_dir/timidity.cfg" "$DESTDIR/etc/"
+	sed -i "s|^dir .*$|dir $eawpats_dir|g" "$DESTDIR/etc/timidity.cfg"
 }

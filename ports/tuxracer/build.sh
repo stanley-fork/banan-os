@@ -31,9 +31,9 @@ post_install() {
 		tar xf "tuxracer-data-$VERSION.tar.gz" || exit 1
 	fi
 
-	mkdir -p "$BANAN_SYSROOT/usr/share/tuxracer" || exit 1
-	cp -r "tuxracer-data-$VERSION"/* "$BANAN_SYSROOT/usr/share/tuxracer/" || exit 1
-	find "$BANAN_SYSROOT/usr/share/tuxracer" -type f -exec chmod 644 {} +
+	mkdir -p "$DESTDIR/usr/share/tuxracer" || exit 1
+	cp -r "tuxracer-data-$VERSION"/* "$DESTDIR/usr/share/tuxracer/" || exit 1
+	find "$DESTDIR/usr/share/tuxracer" -type f -exec chmod 644 {} +
 
 	popd
 }

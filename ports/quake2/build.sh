@@ -31,9 +31,9 @@ build() {
 }
 
 install() {
-	cp -v build/quake2-soft "${BANAN_SYSROOT}/bin/quake2" || exit 1
+	mkdir -p "$DESTDIR/usr/bin"
+	cp -vf build/quake2-soft "$DESTDIR/usr/bin/quake2" || exit 1
 
-	baseq2_tar=$(realpath ../baseq2.tar.gz || exit 1)
-	cd "$BANAN_SYSROOT/home/user/"
-	tar xf $baseq2_tar
+	mkdir -p "$DESTDIR/home/user"
+	tar xf ../baseq2.tar.gz -C "$DESTDIR/home/user/"
 }

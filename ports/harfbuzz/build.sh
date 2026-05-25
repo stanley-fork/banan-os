@@ -23,7 +23,7 @@ build() {
 }
 
 install() {
-	meson install --destdir="$BANAN_SYSROOT" -C build || exit 1
+	meson install --destdir="$DESTDIR" -C build || exit 1
 }
 
 post_install() {

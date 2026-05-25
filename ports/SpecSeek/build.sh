@@ -19,5 +19,5 @@ build() {
 }
 
 install() {
-	cp -v bin/gcc/$specseek_arch/specseek_$specseek_arch "$BANAN_SYSROOT/usr/bin/specseek" || exit 1
+	cp -v bin/gcc/$specseek_arch/specseek_$specseek_arch "$DESTDIR/usr/bin/specseek" || exit 1
 }

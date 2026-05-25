@@ -21,6 +21,6 @@ build() {
 }
 
 install() {
-	cmake --install build || exit 1
-	cp $BANAN_TOOLCHAIN_DIR/cmake-platform/* $BANAN_SYSROOT/usr/share/cmake-3.26/Modules/Platform/
+	DESTDIR="$DESTDIR" cmake --install build || exit 1
+	cp $BANAN_TOOLCHAIN_DIR/cmake-platform/* $DESTDIR/usr/share/cmake-3.26/Modules/Platform/
 }

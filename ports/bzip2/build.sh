@@ -13,14 +13,16 @@ build() {
 }
 
 install() {
-	cp -v libbz2.so.$VERSION $BANAN_SYSROOT/usr/lib/ || exit 1
-	ln -svf libbz2.so.$VERSION $BANAN_SYSROOT/usr/lib/libbz2.so || exit 1
-	ln -svf libbz2.so.$VERSION $BANAN_SYSROOT/usr/lib/libbz2.so.1 || exit 1
-	ln -svf libbz2.so.$VERSION $BANAN_SYSROOT/usr/lib/libbz2.so.1.0 || exit 1
+	mkdir -p "$DESTDIR/usr/lib"
+	cp -v   libbz2.so.$VERSION "$DESTDIR/usr/lib/" || exit 1
+	ln -svf libbz2.so.$VERSION "$DESTDIR/usr/lib/libbz2.so"     || exit 1
+	ln -svf libbz2.so.$VERSION "$DESTDIR/usr/lib/libbz2.so.1"   || exit 1
+	ln -svf libbz2.so.$VERSION "$DESTDIR/usr/lib/libbz2.so.1.0" || exit 1
 
-	cp -v bzlib.h $BANAN_SYSROOT/usr/include/ || exit 1
+	mkdir -p "$DESTDIR/usr/include"
+	cp -v bzlib.h "$DESTDIR/usr/include/" || exit 1
 
-	cat > $BANAN_SYSROOT/usr/lib/pkgconfig/bzip2.pc << EOF
+	cat > $DESTDIR/usr/lib/pkgconfig/bzip2.pc << EOF
 prefix=/usr
 exec_prefix=\${prefix}
 bindir=\${exec_prefix}/bin

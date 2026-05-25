@@ -50,5 +50,6 @@ build() {
 }
 
 install() {
-	cp -v links "$BANAN_SYSROOT/usr/bin/" || exit 1
+	mkdir -p "$DESTDIR/usr/bin"
+	cp -v links "$DESTDIR/usr/bin/" || exit 1
 }

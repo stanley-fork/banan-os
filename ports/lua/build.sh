@@ -13,5 +13,5 @@ build() {
 }
 
 install() {
-	make install PLAT=posix INSTALL_TOP="$BANAN_SYSROOT/usr" || exit 1
+	make install PLAT=posix INSTALL_TOP="$DESTDIR/usr" || exit 1
 }

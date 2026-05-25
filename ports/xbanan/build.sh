@@ -18,10 +18,11 @@ build() {
 }
 
 install() {
-	cp -v build/xbanan/xbanan "$BANAN_SYSROOT/usr/bin" || exit 1
+	mkdir -p "$DESTDIR/usr/bin"
+	cp -v build/xbanan/xbanan "$DESTDIR/usr/bin/" || exit 1
 
-	mkdir -p "$BANAN_SYSROOT/usr/share/fonts/X11"
-	cp -r fonts/misc "$BANAN_SYSROOT/usr/share/fonts/X11/" || exit 1
+	mkdir -p "$DESTDIR/usr/share/fonts/X11"
+	cp -r fonts/misc "$DESTDIR/usr/share/fonts/X11/" || exit 1
 }
 
 post_install() {
