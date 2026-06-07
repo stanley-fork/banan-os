@@ -93,7 +93,7 @@ namespace Kernel
 
 	void SharedFileData::sync_no_lock(size_t page_index)
 	{
-		if (pages[page_index] == 0 || BAN::atomic_load(writers[page_index]) == 0)
+		if (pages[page_index] == 0 || BAN::atomic_load(writers[page_index]) > 0)
 			return;
 
 		uint8_t page_buffer[PAGE_SIZE];
@@ -108,8 +108,9 @@ namespace Kernel
 
 	BAN::ErrorOr<void> FileBackedRegion::msync(vaddr_t address, size_t size, int flags)
 	{
-		if (flags != MS_SYNC)
-			dprintln("async file backed mmap msync");
+		// TODO: maybe do something with the flags :)
+		(void)flags;
+
 		if (m_type != Type::SHARED)
 			return {};
 

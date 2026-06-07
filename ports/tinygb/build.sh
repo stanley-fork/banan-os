@@ -15,5 +15,5 @@ build() {
 }
 
 install() {
-	cp -v tinygb "$BANAN_SYSROOT"/usr/bin || exit 1
+	cp -v tinygb "$DESTDIR/usr/bin/" || exit 1
 }

@@ -300,10 +300,10 @@ namespace LibGUI
 		return {};
 	}
 
-	void Window::wait_events()
+	void Window::wait_events(const timespec* timeout)
 	{
 		epoll_event dummy;
-		epoll_wait(m_epoll_fd, &dummy, 1, -1);
+		epoll_pwait2(m_epoll_fd, &dummy, 1, timeout, nullptr);
 	}
 
 	void Window::poll_events()

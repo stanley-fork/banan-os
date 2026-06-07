@@ -16,22 +16,23 @@ namespace Kernel
 		MUST(s_instance->TmpFileSystem::initialize(0555, 0, 0));
 
 		auto meminfo_inode = MUST(ProcROInode::create_new(
-			[](off_t offset, BAN::ByteSpan buffer) -> size_t
+			[](off_t offset, BAN::ByteSpan buffer, void*) -> BAN::ErrorOr<size_t>
 			{
 				ASSERT(offset >= 0);
 				if ((size_t)offset >= sizeof(full_meminfo_t))
 					return 0;
 
-				full_meminfo_t meminfo;
-				meminfo.page_size = PAGE_SIZE;
-				meminfo.free_pages = Heap::get().free_pages();
-				meminfo.used_pages = Heap::get().used_pages();
+				const full_meminfo_t meminfo {
+					.page_size = PAGE_SIZE,
+					.free_pages = Heap::get().free_pages(),
+					.used_pages = Heap::get().used_pages(),
+				};
 
 				size_t bytes = BAN::Math::min<size_t>(sizeof(full_meminfo_t) - offset, buffer.size());
 				memcpy(buffer.data(), (uint8_t*)&meminfo + offset, bytes);
 				return bytes;
 			},
-			*s_instance, 0444, 0, 0
+			*s_instance, nullptr, 0444, 0, 0
 		));
 		MUST(static_cast<TmpDirectoryInode*>(s_instance->root_inode().ptr())->link_inode(*meminfo_inode, "meminfo"_sv));
 
@@ -46,6 +47,35 @@ namespace Kernel
 			nullptr, nullptr, *s_instance, 0444, 0, 0)
 		);
 		MUST(static_cast<TmpDirectoryInode*>(s_instance->root_inode().ptr())->link_inode(*self_inode, "self"_sv));
+	}
+
+	void ProcFileSystem::post_scheduler_initialize()
+	{
+		MUST(s_instance->root_inode()->create_directory("cpu"_sv, Inode::Mode::IFDIR | 0555, 0, 0));
+		auto cpu_directory = MUST(s_instance->root_inode()->find_inode("cpu"_sv));
+
+		for (size_t i = 0; i < Processor::count(); i++)
+		{
+			auto cpu_inode = MUST(ProcROInode::create_new(
+				[](off_t offset, BAN::ByteSpan buffer, void* index_ptr) -> BAN::ErrorOr<size_t>
+				{
+					ASSERT(offset >= 0);
+
+					const size_t index = reinterpret_cast<uintptr_t>(index_ptr);
+					const auto load_stats = Processor::get_load_stats(index);
+
+					auto string = TRY(BAN::String::formatted("{} {}", load_stats.ns_idle, load_stats.ns_total));
+					if (static_cast<size_t>(offset) >= string.size())
+						return 0;
+
+					const size_t bytes = BAN::Math::min<size_t>(string.size() - offset, buffer.size());
+					memcpy(buffer.data(), string.data() + offset, bytes);
+					return bytes;
+				},
+				*s_instance, reinterpret_cast<void*>(i), 0444, 0, 0
+			));
+			MUST(cpu_directory->link_inode(MUST(BAN::String::formatted("{}", i)), cpu_inode));
+		}
 	}
 
 	ProcFileSystem& ProcFileSystem::get()

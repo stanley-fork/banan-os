@@ -134,6 +134,12 @@ void clearerr(FILE* file)
 	file->error = false;
 }
 
+void __fseterr(FILE* file)
+{
+	ScopeLock _(file);
+	file->error = true;
+}
+
 char* ctermid(char* buffer)
 {
 	static char s_buffer[L_ctermid];
@@ -398,7 +404,8 @@ FILE* freopen(const char* pathname, const char* mode_str, FILE* file)
 
 	if (pathname)
 	{
-		fclose(file);
+		fflush(file);
+		close(file->fd);
 		file->fd = open(pathname, mode, 0666);
 		file->mode = mode & O_ACCMODE;
 		if (file->fd == -1)

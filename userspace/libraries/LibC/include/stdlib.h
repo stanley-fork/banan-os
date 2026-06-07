@@ -75,8 +75,8 @@ int					mblen(const char* s, size_t n);
 size_t				mbstowcs(wchar_t* __restrict pwcs, const char* __restrict s, size_t n);
 int					mbtowc(wchar_t* __restrict pwc, const char* __restrict s, size_t n);
 char*				mkdtemp(char* _template);
-char*				mktemp(char* _template);
 int					mkstemp(char* _template);
+int					mkostemp(char* _template, int flags);
 long				mrand48(void);
 long				nrand48(unsigned short xsubi[3]);
 int					posix_memalign(void** memptr, size_t alignment, size_t size);
@@ -108,6 +108,10 @@ int					unlockpt(int fildes);
 int					unsetenv(const char* name);
 size_t				wcstombs(char* __restrict s, const wchar_t* __restrict pwcs, size_t n);
 int					wctomb(char* s, wchar_t wchar);
+
+char*	mktemp(char* _template);
+int		mkstemps(char* _template, int suffixlen);
+int		mkostemps(char* _template, int suffixlen, int flags);
 
 __END_DECLS
 

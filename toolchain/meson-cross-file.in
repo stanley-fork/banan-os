@@ -11,11 +11,12 @@ ar = 'ARCH-pc-banan_os-ar'
 ld = 'ARCH-pc-banan_os-ld'
 objcopy = 'ARCH-pc-banan_os-objcopy'
 strip = 'ARCH-pc-banan_os-strip'
-pkg-config = 'pkg-config'
-cmake = 'CMAKE'
+pkg-config = 'PKG_CONFIG'
+cmake = 'CMAKE_BINARY'
 
 glib-compile-schemas = '/usr/bin/glib-compile-schemas'
 glib-compile-resources = '/usr/bin/glib-compile-resources'
 
 [properties]
 sys_root='SYSROOT'
+cmake_toolchain_file='CMAKE_TOOLCHAIN'

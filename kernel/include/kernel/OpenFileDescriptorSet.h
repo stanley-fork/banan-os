@@ -58,6 +58,8 @@ namespace Kernel
 		BAN::ErrorOr<size_t> recvmsg(int socket, msghdr& message, int flags);
 		BAN::ErrorOr<size_t> sendmsg(int socket, const msghdr& message, int flags);
 
+		int get_max_open_fd() const;
+
 		BAN::ErrorOr<VirtualFileSystem::File> file_of(int) const;
 		BAN::ErrorOr<BAN::String> path_of(int) const;
 		BAN::ErrorOr<BAN::RefPtr<Inode>> inode_of(int);

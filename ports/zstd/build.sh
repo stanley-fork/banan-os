@@ -16,5 +16,5 @@ build() {
 }
 
 install() {
-	cmake --install _build ||exit 1
+	DESTDIR="$DESTDIR" cmake --install _build ||exit 1
 }

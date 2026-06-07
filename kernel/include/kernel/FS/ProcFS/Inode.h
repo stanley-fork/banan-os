@@ -76,7 +76,7 @@ namespace Kernel
 	class ProcROInode final : public TmpInode
 	{
 	public:
-		static BAN::ErrorOr<BAN::RefPtr<ProcROInode>> create_new(size_t (*callback)(off_t, BAN::ByteSpan), TmpFileSystem&, mode_t, uid_t, gid_t);
+		static BAN::ErrorOr<BAN::RefPtr<ProcROInode>> create_new(BAN::ErrorOr<size_t> (*callback)(off_t, BAN::ByteSpan, void*), TmpFileSystem&, void*, mode_t, uid_t, gid_t);
 		~ProcROInode() = default;
 
 	protected:
@@ -92,10 +92,11 @@ namespace Kernel
 		virtual bool has_hungup_impl() const override { return false; }
 
 	private:
-		ProcROInode(size_t (*callback)(off_t, BAN::ByteSpan), TmpFileSystem&, const TmpInodeInfo&);
+		ProcROInode(BAN::ErrorOr<size_t> (*callback)(off_t, BAN::ByteSpan, void*), TmpFileSystem&, void*, const TmpInodeInfo&);
 
 	private:
-		size_t (*m_callback)(off_t, BAN::ByteSpan);
+		BAN::ErrorOr<size_t> (*m_callback)(off_t, BAN::ByteSpan, void*);
+		void* m_argument;
 	};
 
 	class ProcSymlinkInode final : public TmpInode

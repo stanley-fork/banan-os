@@ -66,7 +66,7 @@ struct DNSEntry
 
 	DNSEntry(DNSEntry&& other)
 	{
-		*this = BAN::move(other);
+		initialize_no_clear(BAN::move(other));
 	}
 
 	~DNSEntry() { clear(); }
@@ -74,6 +74,12 @@ struct DNSEntry
 	DNSEntry& operator=(DNSEntry&& other)
 	{
 		clear();
+		initialize_no_clear(BAN::move(other));
+		return *this;
+	}
+
+	void initialize_no_clear(DNSEntry&& other)
+	{
 		valid_until = other.valid_until;
 		switch (type = other.type)
 		{
@@ -88,7 +94,6 @@ struct DNSEntry
 				ASSERT_NOT_REACHED();
 		}
 		other.clear();
-		return *this;
 	}
 
 	void clear()
@@ -448,6 +453,7 @@ int main(int, char**)
 
 				if (send(client.socket, &addr, sizeof(addr), 0) == -1)
 					dprintln("send: {}", strerror(errno));
+				dwarnln("{} -> {}", client.query.data(), inet_ntoa({ .s_addr = resolved->raw }));
 				client.close = true;
 				break;
 			}
@@ -460,14 +466,8 @@ int main(int, char**)
 
 			if (!client.query.empty())
 			{
-				static uint8_t buffer[4096];
-				ssize_t nrecv = recv(client.socket, buffer, sizeof(buffer), 0);
-				if (nrecv < 0)
-					dprintln("{}", strerror(errno));
-				if (nrecv <= 0)
-					client.close = true;
-				else
-					dprintln("Client already has a query");
+				dprintln("unexpected data from client");
+				client.close = true;
 				continue;
 			}
 
@@ -480,7 +480,10 @@ int main(int, char**)
 
 			BAN::Optional<BAN::IPv4Address> result;
 
+			// TODO: add and parse /etc/hosts
 			if (*hostname && strcmp(query->data(), hostname) == 0)
+				result = BAN::IPv4Address(ntohl(INADDR_LOOPBACK));
+			else if (strcmp(query->data(), "localhost") == 0)
 				result = BAN::IPv4Address(ntohl(INADDR_LOOPBACK));
 			else if (auto resolved = resolve_from_dns_cache(dns_cache, query.value()); resolved.has_value())
 				result = resolved.release_value();

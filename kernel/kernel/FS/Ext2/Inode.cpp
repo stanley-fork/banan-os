@@ -42,24 +42,6 @@ namespace Kernel
 		return (m_ino - 1) / m_fs.superblock().blocks_per_group;
 	}
 
-	BAN::ErrorOr<BAN::RefPtr<Ext2Inode>> Ext2Inode::create(Ext2FS& fs, uint32_t inode_ino)
-	{
-		auto it = fs.inode_cache().find(inode_ino);
-		if (it != fs.inode_cache().end())
-			return it->value;
-
-		auto inode_location = TRY(fs.locate_inode(inode_ino));
-
-		auto block_buffer = TRY(fs.get_block_buffer());
-		TRY(fs.read_block(inode_location.block, block_buffer));
-
-		auto& inode = block_buffer.span().slice(inode_location.offset).as<Ext2::Inode>();
-
-		auto result = TRY(BAN::RefPtr<Ext2Inode>::create(fs, inode, inode_ino));
-		TRY(fs.inode_cache().insert(inode_ino, result));
-		return result;
-	}
-
 	Ext2Inode::~Ext2Inode()
 	{
 		if (m_nlink > 0)
@@ -89,57 +71,53 @@ namespace Kernel
 		return {};
 	}
 
-	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::block_from_indirect_block_no_lock(uint32_t& block, uint32_t index, uint32_t depth, bool allocate)
+	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::block_from_indirect_block_no_lock(uint32_t block, uint32_t index, uint32_t depth, bool allocate)
 	{
 		const uint32_t indices_per_fs_block = blksize() / sizeof(uint32_t);
 
-		if (block == 0 && !allocate)
-			return BAN::Optional<uint32_t>();
+		ASSERT(block != 0);
 
 		if (depth == 0)
+			return BAN::Optional<uint32_t>(block);
+
+		uint32_t local_index = index;
+		for (uint32_t i = 1; i < depth; i++)
+			local_index /= indices_per_fs_block;
+		local_index %= indices_per_fs_block;
+
+		uint32_t next_block = 0;
+
+		if (auto cached = block_cache_find(block, local_index); cached.has_value())
+			next_block = cached.value();
+
+		if (next_block == 0)
 		{
-			if (block == 0)
+			auto block_buffer = TRY(m_fs.get_block_buffer());
+			TRY(m_fs.read_block(block, block_buffer));
+			auto block_span = block_buffer.span().as_span<uint32_t>();
+
+			next_block = block_span[local_index];
+
+			if (next_block == 0)
 			{
-				block = TRY(m_fs.reserve_free_block(block_group()));
+				if (!allocate)
+					return BAN::Optional<uint32_t>();
+
+				auto zero_buffer = TRY(m_fs.get_block_buffer());
+				memset(zero_buffer.data(), 0, zero_buffer.size());
+
+				next_block = TRY(m_fs.reserve_free_block(block_group()));
+				TRY(m_fs.write_block(next_block, zero_buffer));
 				m_blocks++;
 
-				auto block_buffer = TRY(m_fs.get_block_buffer());
-				memset(block_buffer.data(), 0x00, block_buffer.size());
+				block_span[local_index] = next_block;
 				TRY(m_fs.write_block(block, block_buffer));
 			}
 
-			return BAN::Optional<uint32_t>(block);
+			block_cache_add(block, local_index, next_block);
 		}
 
-		auto block_buffer = TRY(m_fs.get_block_buffer());
-
-		bool needs_write = false;
-
-		if (block != 0)
-			TRY(m_fs.read_block(block, block_buffer));
-		else
-		{
-			block = TRY(m_fs.reserve_free_block(block_group()));
-			m_blocks++;
-
-			memset(block_buffer.data(), 0, block_buffer.size());
-
-			needs_write = true;
-		}
-
-		uint32_t divisor = 1;
-		for (uint32_t i = 1; i < depth; i++)
-			divisor *= indices_per_fs_block;
-
-		uint32_t& new_block = block_buffer.span().as_span<uint32_t>()[(index / divisor) % indices_per_fs_block];
-		const auto old_block = new_block;
-
-		const auto result = TRY(block_from_indirect_block_no_lock(new_block, index, depth - 1, allocate));
-
-		if (needs_write || old_block != new_block)
-			TRY(m_fs.write_block(block, block_buffer));
-
-		return result;
+		return block_from_indirect_block_no_lock(next_block, index, depth - 1, allocate);
 	}
 
 	BAN::ErrorOr<BAN::Optional<uint32_t>> Ext2Inode::fs_block_of_data_block_index_no_lock(uint32_t data_block_index, bool allocate)
@@ -166,16 +144,29 @@ namespace Kernel
 		}
 		data_block_index -= 12;
 
-		if (data_block_index < indices_per_block)
-			return block_from_indirect_block_no_lock(m_ext2_blocks.block[12], data_block_index, 1, allocate);
-		data_block_index -= indices_per_block;
+		uint32_t depth_block_count = indices_per_block;
+		for (size_t i = 0; i < 3; i++)
+		{
+			if (data_block_index < depth_block_count)
+			{
+				auto& block = m_ext2_blocks.block[12 + i];
+				if (block == 0)
+				{
+					if (!allocate)
+						return BAN::Optional<uint32_t>();
 
-		if (data_block_index < indices_per_block * indices_per_block)
-			return block_from_indirect_block_no_lock(m_ext2_blocks.block[13], data_block_index, 2, allocate);
-		data_block_index -= indices_per_block * indices_per_block;
+					auto zero_buffer = TRY(m_fs.get_block_buffer());
+					memset(zero_buffer.data(), 0, zero_buffer.size());
 
-		if (data_block_index < indices_per_block * indices_per_block * indices_per_block)
-			return block_from_indirect_block_no_lock(m_ext2_blocks.block[14], data_block_index, 3, allocate);
+					block = TRY(m_fs.reserve_free_block(block_group()));
+					TRY(m_fs.write_block(block, zero_buffer));
+					m_blocks++;
+				}
+				return block_from_indirect_block_no_lock(block, data_block_index, i + 1, allocate);
+			}
+			data_block_index -= indices_per_block;
+			depth_block_count *= indices_per_block;
+		}
 
 		ASSERT_NOT_REACHED();
 	}
@@ -542,7 +533,7 @@ done:
 
 		const uint32_t new_ino = TRY(m_fs.create_inode(initialize_new_inode_info(mode, uid, gid)));
 
-		auto inode_or_error = Ext2Inode::create(m_fs, new_ino);
+		auto inode_or_error = m_fs.open_inode(new_ino);
 		if (inode_or_error.is_error())
 		{
 			TRY(m_fs.delete_inode(new_ino));
@@ -568,7 +559,7 @@ done:
 
 		const uint32_t new_ino = TRY(m_fs.create_inode(initialize_new_inode_info(mode, uid, gid)));
 
-		auto inode_or_error = Ext2Inode::create(m_fs, new_ino);
+		auto inode_or_error = m_fs.open_inode(new_ino);
 		if (inode_or_error.is_error())
 		{
 			TRY(m_fs.delete_inode(new_ino));
@@ -814,7 +805,7 @@ needs_new_block:
 					}
 					else if (entry_name == ".."_sv)
 					{
-						auto parent = TRY(Ext2Inode::create(m_fs, entry.inode));
+						auto parent = TRY(m_fs.open_inode(entry.inode));
 						parent->m_nlink--;
 						TRY(parent->sync_inode_no_lock());
 					}
@@ -860,7 +851,7 @@ needs_new_block:
 				auto& entry = block_buffer.span().slice(offset).as<Ext2::LinkedDirectoryEntry>();
 				if (entry.inode && name == BAN::StringView(entry.name, entry.name_len))
 				{
-					auto inode = TRY(Ext2Inode::create(m_fs, entry.inode));
+					auto inode = TRY(m_fs.open_inode(entry.inode));
 					if (cleanup_directory && inode->mode().ifdir())
 					{
 						if (!TRY(inode->is_directory_empty_no_lock()))
@@ -878,11 +869,7 @@ needs_new_block:
 					// NOTE: If this was the last link to inode we must
 					//       remove it from inode cache to trigger cleanup
 					if (inode->nlink() == 0)
-					{
-						auto& cache = m_fs.inode_cache();
-						if (cache.contains(inode->ino()))
-							cache.remove(inode->ino());
-					}
+						m_fs.remove_from_cache(inode->ino());
 
 					// FIXME: This should expand the last inode if exists
 					entry.inode = 0;
@@ -891,6 +878,8 @@ needs_new_block:
 				offset += entry.rec_len;
 			}
 		}
+
+		dir_cache_remove(name);
 
 		return {};
 	}
@@ -948,6 +937,9 @@ needs_new_block:
 	{
 		ASSERT(mode().ifdir());
 
+		if (auto cached = dir_cache_find(file_name))
+			return cached;
+
 		auto block_buffer = TRY(m_fs.get_block_buffer());
 
 		for (uint32_t i = 0; i < max_used_data_block_count(); i++)
@@ -963,11 +955,129 @@ needs_new_block:
 				auto& entry = entry_span.as<const Ext2::LinkedDirectoryEntry>();
 				BAN::StringView entry_name(entry.name, entry.name_len);
 				if (entry.inode && entry_name == file_name)
-					return BAN::RefPtr<Inode>(TRY(Ext2Inode::create(m_fs, entry.inode)));
+				{
+					auto inode = BAN::RefPtr<Inode>(TRY(m_fs.open_inode(entry.inode)));
+					dir_cache_add(file_name, inode);
+					return inode;
+				}
 				entry_span = entry_span.slice(entry.rec_len);
 			}
 		}
 
 		return BAN::Error::from_errno(ENOENT);
 	}
+
+	BAN::Optional<uint32_t> Ext2Inode::block_cache_find(uint32_t block, uint32_t index) const
+	{
+		SpinLockGuard _(m_block_cache_lock);
+		for (const auto& cache : m_block_cache)
+		{
+			if (cache.block != block || cache.index != index)
+				continue;
+			cache.freq++;
+			return cache.target;
+		}
+		return {};
+	}
+
+	void Ext2Inode::block_cache_remove(uint32_t block, uint32_t index)
+	{
+		SpinLockGuard _(m_block_cache_lock);
+		for (auto& cache : m_block_cache)
+		{
+			if (cache.block != block || cache.index != index)
+				continue;
+			cache = {};
+			return;
+		}
+	}
+
+	void Ext2Inode::block_cache_add(uint32_t block, uint32_t index, uint32_t target)
+	{
+		SpinLockGuard _(m_block_cache_lock);
+
+		size_t min_freq = BAN::numeric_limits<size_t>::max();
+		size_t min_index = 0;
+		for (size_t i = 0; i < m_block_cache.size(); i++)
+		{
+			const auto& cache = m_block_cache[i];
+			if (cache.block == block && cache.index == index)
+			{
+				ASSERT(cache.target == target);
+				cache.freq++;
+				return;
+			}
+			if (cache.freq < min_freq)
+			{
+				min_freq = cache.freq;
+				min_index = i;
+			}
+		}
+
+		m_block_cache[min_index] = {
+			.freq = 1,
+			.block = block,
+			.index = index,
+			.target = target,
+		};
+	}
+
+	BAN::RefPtr<Inode> Ext2Inode::dir_cache_find(BAN::StringView name) const
+	{
+		RWLockRDGuard _(m_dir_cache_lock);
+		for (const auto& cache : m_dir_cache)
+		{
+			if (!cache.inode || name != BAN::StringView(cache.name, cache.name_len))
+				continue;
+			BAN::atomic_add_fetch(cache.freq, 1);
+			return cache.inode;
+		}
+		return {};
+	}
+
+	void Ext2Inode::dir_cache_remove(BAN::StringView name)
+	{
+		RWLockWRGuard _(m_dir_cache_lock);
+		for (auto& cache : m_dir_cache)
+		{
+			if (!cache.inode || name != BAN::StringView(cache.name, cache.name_len))
+				continue;
+			cache.freq = 0;
+			cache.inode = {};
+			return;
+		}
+	}
+
+	void Ext2Inode::dir_cache_add(BAN::StringView name, BAN::RefPtr<Inode> inode)
+	{
+		RWLockWRGuard _(m_dir_cache_lock);
+
+		if (m_dir_cache.empty() && m_dir_cache.resize(dir_cache_size).is_error())
+			return;
+
+		size_t min_freq = BAN::numeric_limits<size_t>::max();
+		size_t min_index = 0;
+		for (size_t i = 0; i < m_dir_cache.size(); i++)
+		{
+			const auto& cache = m_dir_cache[i];
+			if (cache.inode && name == BAN::StringView(cache.name, cache.name_len))
+			{
+				ASSERT(cache.inode == inode);
+				cache.freq++;
+				return;
+			}
+			if (cache.freq < min_freq)
+			{
+				min_freq  = cache.freq;
+				min_index = i;
+			}
+		}
+
+		auto& cache = m_dir_cache[min_index];
+		cache.freq     = 1;
+		cache.inode    = inode;
+		cache.name_len = name.size();
+		memcpy(cache.name, name.data(), name.size());
+	}
+
 }

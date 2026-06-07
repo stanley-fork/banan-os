@@ -23,7 +23,6 @@ namespace Kernel
 	ProcessorID          Processor::s_bsp_id                     { PROCESSOR_NONE };
 	BAN::Atomic<uint8_t> Processor::s_processor_count            { 0 };
 	BAN::Atomic<bool>    Processor::s_is_smp_enabled             { false };
-	BAN::Atomic<bool>    Processor::s_should_print_cpu_load      { false };
 	paddr_t              Processor::s_shared_page_paddr          { 0 };
 	vaddr_t              Processor::s_shared_page_vaddr          { 0 };
 
@@ -598,6 +597,26 @@ namespace Kernel
 		set_interrupt_state(state);
 	}
 
+	Processor::LoadStats Processor::get_load_stats(size_t index)
+	{
+		ASSERT(index < Processor::count());
+
+		auto& processor = s_processors[s_processor_ids[index].as_u32()];
+
+		bool expected = false;
+		while (!processor.m_load_stat_lock.compare_exchange(expected, true))
+		{
+			Processor::pause();
+			expected = false;
+		}
+
+		const auto load_stats = processor.m_load_stats;
+
+		processor.m_load_stat_lock.store(false);
+
+		return load_stats;
+	}
+
 	void Processor::yield()
 	{
 		auto state = get_interrupt_state();
@@ -605,47 +624,32 @@ namespace Kernel
 
 		ASSERT(!Thread::current().has_spinlock());
 
-		auto& processor_info = s_processors[current_id().as_u32()];
+		auto& processor = s_processors[current_id().as_u32()];
 
 		{
-			constexpr uint64_t load_update_interval_ns = 1'000'000'000;
-
-			const uint64_t current_ns = SystemTimer::get().ns_since_boot();
-
-			if (scheduler().is_idle())
-				processor_info.m_idle_ns += current_ns - processor_info.m_start_ns;
-
-			if (current_ns >= processor_info.m_next_update_ns)
+			bool expected = false;
+			while (!processor.m_load_stat_lock.compare_exchange(expected, true))
 			{
-				if (s_should_print_cpu_load && g_terminal_driver)
-				{
-					const uint64_t duration_ns = current_ns - processor_info.m_last_update_ns;
-					const uint64_t load_x1000  = 100'000 * (duration_ns - BAN::Math::min(processor_info.m_idle_ns, duration_ns)) / duration_ns;
-
-					uint32_t x = g_terminal_driver->width() - 16;
-					uint32_t y = current_id().as_u32();
-					const auto proc_putc =
-						[&x, y](char ch)
-						{
-							if (x < g_terminal_driver->width() && y < g_terminal_driver->height())
-								g_terminal_driver->putchar_at(ch, x++, y, TerminalColor::WHITE, TerminalColor::BLACK);
-						};
-
-					BAN::Formatter::print(proc_putc, "CPU { 2}: { 3}.{3}%", current_id(), load_x1000 / 1000, load_x1000 % 1000);
-				}
-
-				processor_info.m_idle_ns         = 0;
-				processor_info.m_last_update_ns  = current_ns;
-				processor_info.m_next_update_ns += load_update_interval_ns;
+				Processor::pause();
+				expected = false;
 			}
+
+			const uint64_t elapsed_ns = SystemTimer::get().ns_since_boot() - processor.m_load_start_ns;
+
+			auto& load_stats = processor.m_load_stats;
+			if (scheduler().is_idle())
+				load_stats.ns_idle += elapsed_ns;
+			load_stats.ns_total += elapsed_ns;
+
+			processor.m_load_stat_lock.store(false);
 		}
 
 		if (!scheduler().is_idle())
 			Thread::current().set_cpu_time_stop();
 
-		asm_yield_trampoline(processor_info.stack_top_vaddr());
+		asm_yield_trampoline(processor.stack_top_vaddr());
 
-		processor_info.m_start_ns = SystemTimer::get().ns_since_boot();
+		processor.m_load_start_ns = SystemTimer::get().ns_since_boot();
 
 		if (!scheduler().is_idle())
 			Thread::current().set_cpu_time_start();

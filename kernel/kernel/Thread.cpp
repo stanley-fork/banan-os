@@ -10,9 +10,13 @@
 #include <kernel/Thread.h>
 #include <kernel/Timer/Timer.h>
 #include <kernel/UserCopy.h>
+#include <sys/syscall.h>
 
 namespace Kernel
 {
+
+	static_assert(SYS_SIGPROCMASK == 79, "this is hard coded in arch/*/Signal.S");
+	static_assert(SIG_SETMASK     ==  3, "this is hard coded in arch/*/Signal.S");
 
 #if ARCH(x86_64)
 	static constexpr vaddr_t s_user_stack_addr_start = 0x0000700000000000;
@@ -582,9 +586,15 @@ namespace Kernel
 		const uint64_t full_pending_mask = m_signal_pending_mask | process().signal_pending_mask();
 		const uint64_t signals = full_pending_mask & ~m_signal_block_mask;
 		for (size_t sig = _SIGMIN; sig <= _SIGMAX; sig++)
-			if (signals & (static_cast<uint64_t>(1) << sig))
-				if (is_terminating_signal(sig) || is_abnormal_terminating_signal(sig))
-					return true;
+		{
+			if (!(signals & (static_cast<uint64_t>(1) << sig)))
+				continue;
+			if (!is_terminating_signal(sig) && !is_abnormal_terminating_signal(sig))
+				continue;
+			SpinLockGuard _(m_process->m_signal_lock);
+			if (m_process->m_signal_handlers[sig].sa_handler == SIG_DFL)
+				return true;
+		}
 		return false;
 	}
 

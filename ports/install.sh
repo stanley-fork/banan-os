@@ -43,8 +43,10 @@ export MESON_CROSS_FILE="$BANAN_PORT_DIR/$BANAN_ARCH-banan_os-meson.txt"
 if [ ! -f "$MESON_CROSS_FILE" ] || [ "$MESON_CROSS_FILE" -ot "$BANAN_TOOLCHAIN_DIR/meson-cross-file.in" ]; then
 	cp "$BANAN_TOOLCHAIN_DIR/meson-cross-file.in" "$MESON_CROSS_FILE"
 	sed -i "s|ARCH|$BANAN_ARCH|" "$MESON_CROSS_FILE"
-	sed -i "s|CMAKE|$BANAN_CMAKE|" "$MESON_CROSS_FILE"
 	sed -i "s|SYSROOT|$BANAN_SYSROOT|" "$MESON_CROSS_FILE"
+	sed -i "s|PKG_CONFIG|$BANAN_PORT_DIR/pkg-config|" "$MESON_CROSS_FILE"
+	sed -i "s|CMAKE_BINARY|$BANAN_CMAKE|" "$MESON_CROSS_FILE"
+	sed -i "s|CMAKE_TOOLCHAIN|$BANAN_TOOLCHAIN_DIR/Toolchain.txt|" "$MESON_CROSS_FILE"
 fi
 
 MAKE_BUILD_TARGETS=('all')
@@ -250,6 +252,7 @@ if (( $needs_compile )); then
 	sha256sum "$BANAN_SYSROOT/usr/lib/libc.a" > "../.compile_hash"
 fi
 
+DESTDIR="$BANAN_SYSROOT"
 pre_install
 install
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"

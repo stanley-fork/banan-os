@@ -1,7 +1,7 @@
 #pragma once
 
-#include <kernel/Lock/Mutex.h>
-#include <kernel/Lock/LockGuard.h>
+#include <kernel/Lock/SpinLock.h>
+#include <kernel/Lock/SpinLockAsMutex.h>
 
 namespace Kernel
 {
@@ -15,15 +15,18 @@ namespace Kernel
 
 		void rd_lock()
 		{
-			LockGuard _(m_mutex);
+			SpinLockGuard _(m_lock);
 			while (m_writers_waiting > 0 || m_writer != -1)
-				m_thread_blocker.block_indefinite(&m_mutex);
+			{
+				SpinLockGuardAsMutex smutex(_);
+				m_thread_blocker.block_indefinite(&smutex);
+			}
 			m_readers_active++;
 		}
 
 		void rd_unlock()
 		{
-			LockGuard _(m_mutex);
+			SpinLockGuard _(m_lock);
 			if (--m_readers_active == 0)
 				m_thread_blocker.unblock();
 		}
@@ -36,11 +39,14 @@ namespace Kernel
 				return;
 			}
 
-			LockGuard _(m_mutex);
+			SpinLockGuard _(m_lock);
 
 			m_writers_waiting++;
 			while (m_readers_active > 0 || m_writer != -1)
-				m_thread_blocker.block_indefinite(&m_mutex);
+			{
+				SpinLockGuardAsMutex smutex(_);
+				m_thread_blocker.block_indefinite(&smutex);
+			}
 			m_writers_waiting--;
 
 			m_writer = Thread::current_tid();
@@ -51,13 +57,13 @@ namespace Kernel
 		{
 			if (--m_writer_depth != 0)
 				return;
-			LockGuard _(m_mutex);
+			SpinLockGuard _(m_lock);
 			m_writer = -1;
 			m_thread_blocker.unblock();
 		}
 
 	private:
-		Mutex m_mutex;
+		SpinLock m_lock;
 		ThreadBlocker m_thread_blocker;
 		uint32_t m_readers_active  { 0 };
 		uint32_t m_writers_waiting { 0 };

@@ -3,7 +3,7 @@
 NAME='xash3d-fwgs'
 VERSION='git'
 DOWNLOAD_URL="https://github.com/FWGS/xash3d-fwgs.git#da1b9ad80d76156a5cbd54d3ce87edb32634ea87"
-DEPENDENCIES=('SDL2' 'freetype')
+DEPENDENCIES=('SDL2' 'freetype' 'bzip2' 'libvorbis')
 
 configure() {
 	git submodule update --init --recursive || exit 1
@@ -22,13 +22,12 @@ build() {
 }
 
 install() {
-    ./waf install --destdir=$BANAN_SYSROOT/home/user/halflife || exit 1
-	patchelf --add-needed libxash.so $BANAN_SYSROOT/home/user/halflife/xash3d
+	./waf install --destdir="$DESTDIR/usr/share/games/halflife" || exit 1
 
-	cat > $BANAN_SYSROOT/home/user/halflife/start.sh << EOF
+	cat > "$DESTDIR/home/user/halflife/start.sh" << EOF
 #!/bin/Shell
 export LD_LIBRARY_PATH=/home/user/halflife
 ./xash3d -console
 EOF
-	chmod +x $BANAN_SYSROOT/home/user/halflife/start.sh
+	chmod +x $DESTDIR/home/user/halflife/start.sh
 }

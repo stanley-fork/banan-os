@@ -3,7 +3,7 @@
 NAME='links'
 VERSION='2.30'
 DOWNLOAD_URL="http://links.twibright.com/download/links-$VERSION.tar.gz#7f0d54f4f7d1f094c25c9cbd657f98bc998311122563b1d757c9aeb1d3423b9e"
-DEPENDENCIES=('ca-certificates' 'openssl' 'zlib' 'zstd' 'libpng' 'libjpeg' 'libtiff' 'libwebp')
+DEPENDENCIES=('openssl' 'zlib' 'zstd' 'libpng' 'libjpeg' 'libtiff' 'libwebp')
 
 post_configure() {
 	config_defines=(
@@ -50,5 +50,6 @@ build() {
 }
 
 install() {
-	cp -v links "$BANAN_SYSROOT/usr/bin/" || exit 1
+	mkdir -p "$DESTDIR/usr/bin"
+	cp -v links "$DESTDIR/usr/bin/" || exit 1
 }

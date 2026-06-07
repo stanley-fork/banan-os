@@ -1,5 +1,6 @@
 #include <BAN/ScopeGuard.h>
 #include <kernel/BootInfo.h>
+#include <kernel/Lock/LockGuard.h>
 #include <kernel/Memory/Heap.h>
 #include <kernel/Memory/PageTable.h>
 #include <kernel/Storage/DiskCache.h>

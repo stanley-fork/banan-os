@@ -4,9 +4,10 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <time.h>
+#include <inttypes.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <time.h>
 
 static BAN::ErrorOr<long long> read_integer_from_file(const char* file)
 {
@@ -63,6 +64,77 @@ static BAN::String get_battery_percentage()
 	return result;
 }
 
+static BAN::String get_cpu_load(bool show_long)
+{
+	struct LoadStats
+	{
+		uint64_t idle_ns;
+		uint64_t total_ns;
+	};
+
+	static BAN::Vector<LoadStats> cpu_stats;
+
+	BAN::Vector<LoadStats> delta_stats;
+	(void)delta_stats.reserve(show_long ? cpu_stats.size() : 1);
+
+	for (size_t i = 0;; i++)
+	{
+		char buffer[PATH_MAX];
+		sprintf(buffer, "/proc/cpu/%zu", i);
+
+		FILE* fp = fopen(buffer, "r");
+		if (fp == nullptr)
+			break;
+
+		LoadStats stats;
+		if (fscanf(fp, "%" SCNu64 " %" SCNu64, &stats.idle_ns, &stats.total_ns) == 2)
+		{
+			if (i >= cpu_stats.size())
+				MUST(cpu_stats.resize(i + 1, {}));
+
+			const LoadStats delta {
+				.idle_ns  = stats.idle_ns  - cpu_stats[i].idle_ns,
+				.total_ns = stats.total_ns - cpu_stats[i].total_ns,
+			};
+			cpu_stats[i] = stats;
+
+			if (show_long)
+				(void)delta_stats.push_back(delta);
+			else
+			{
+				if (delta_stats.empty())
+					(void)delta_stats.push_back(delta);
+				else
+				{
+					delta_stats[0].idle_ns  += delta.idle_ns;
+					delta_stats[0].total_ns += delta.total_ns;
+				}
+			}
+		}
+
+		fclose(fp);
+	}
+
+	BAN::String result;
+	(void)result.append("CPU");
+
+	for (size_t i = 0; i < delta_stats.size(); i++)
+	{
+		const uint64_t idle_10000 = 10'000 * delta_stats[i].idle_ns / delta_stats[i].total_ns;
+		const uint64_t load_10000 = 10'000 - idle_10000;
+
+		auto string = BAN::String::formatted(" {}.{2}%", load_10000 / 100, load_10000 % 100);
+		if (string.is_error())
+			continue;
+
+		(void)result.append(string.release_value());
+	}
+
+	(void)result.append(" | "_sv);
+
+	return result;
+}
+
 static int open_audio_server_fd()
 {
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -106,9 +178,11 @@ static BAN::String get_audio_volume()
 	return MUST(BAN::String::formatted("vol {}% | ", response / 10));
 }
 
-static BAN::ErrorOr<BAN::String> get_task_bar_string()
+static BAN::ErrorOr<BAN::String> get_task_bar_string(bool show_long)
 {
 	BAN::String result;
+
+	TRY(result.append(get_cpu_load(show_long)));
 
 	TRY(result.append(get_battery_percentage()));
 
@@ -144,6 +218,12 @@ int main()
 
 	window->set_position(0, 0);
 
+	bool show_long = false;
+	window->set_mouse_button_event_callback([&](auto event) {
+		if (event.pressed)
+			show_long = !show_long;
+	});
+
 	window->texture().fill(bg_color);
 	window->invalidate();
 
@@ -153,7 +233,7 @@ int main()
 	const auto update_string =
 		[&]()
 		{
-			auto text_or_error = get_task_bar_string();
+			auto text_or_error = get_task_bar_string(show_long);
 			if (text_or_error.is_error())
 				return;
 			const auto text = text_or_error.release_value();
@@ -176,6 +256,8 @@ int main()
 
 	while (is_running)
 	{
+		window->poll_events();
+
 		update_string();
 
 		constexpr uint64_t ns_per_s = 1'000'000'000;
@@ -193,10 +275,10 @@ int main()
 
 		uint64_t sleep_ns = target_ns - current_ns;
 
-		timespec sleep_ts;
-		sleep_ts.tv_sec  = sleep_ns / ns_per_s;
-		sleep_ts.tv_nsec = sleep_ns % ns_per_s;
+		timespec timeout_ts;
+		timeout_ts.tv_sec  = sleep_ns / ns_per_s;
+		timeout_ts.tv_nsec = sleep_ns % ns_per_s;
 
-		nanosleep(&sleep_ts, nullptr);
+		window->wait_events(&timeout_ts);
 	}
 }

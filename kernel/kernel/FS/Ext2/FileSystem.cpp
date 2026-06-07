@@ -167,8 +167,34 @@ namespace Kernel
 
 	BAN::ErrorOr<void> Ext2FS::initialize_root_inode()
 	{
-		m_root_inode = TRY(Ext2Inode::create(*this, Ext2::Enum::ROOT_INO));
+		m_root_inode = TRY(open_inode(Ext2::Enum::ROOT_INO));
 		return {};
+	}
+
+	BAN::ErrorOr<BAN::RefPtr<Ext2Inode>> Ext2FS::open_inode(ino_t ino)
+	{
+		LockGuard _(m_inode_cache_lock);
+
+		auto it = m_inode_cache.find(ino);
+		if (it != m_inode_cache.end())
+			return it->value;
+
+		auto inode_location = TRY(locate_inode(ino));
+
+		auto block_buffer = TRY(get_block_buffer());
+		TRY(read_block(inode_location.block, block_buffer));
+
+		auto& inode = block_buffer.span().slice(inode_location.offset).as<Ext2::Inode>();
+
+		auto result = TRY(BAN::RefPtr<Ext2Inode>::create(*this, inode, ino));
+		TRY(m_inode_cache.insert(ino, result));
+		return result;
+	}
+
+	void Ext2FS::remove_from_cache(ino_t ino)
+	{
+		LockGuard _(m_inode_cache_lock);
+		m_inode_cache.remove(ino);
 	}
 
 	BAN::ErrorOr<uint32_t> Ext2FS::create_inode(const Ext2::Inode& ext2_inode)

@@ -23,7 +23,7 @@ build() {
 }
 
 install() {
-	meson install --destdir="$BANAN_SYSROOT" -C build || exit 1
+	meson install --destdir="$DESTDIR" -C build || exit 1
 }
 
 post_install() {
@@ -39,9 +39,9 @@ post_install() {
 		tar xf "$font_name.tar.bz2" || exit 1
 	fi
 
-	mkdir -p "$BANAN_SYSROOT/usr/share/fonts/TTF" || exit 1
-	cp "$font_name/ttf/"* "$BANAN_SYSROOT/usr/share/fonts/TTF/" || exit 1
-	cp "$font_name/fontconfig/"* "$BANAN_SYSROOT/usr/share/fontconfig/conf.avail/" || exit 1
+	mkdir -p "$DESTDIR/usr/share/fonts/TTF" || exit 1
+	cp "$font_name/ttf/"* "$DESTDIR/usr/share/fonts/TTF/" || exit 1
+	cp "$font_name/fontconfig/"* "$DESTDIR/usr/share/fontconfig/conf.avail/" || exit 1
 
 	popd &>/dev/null
 }

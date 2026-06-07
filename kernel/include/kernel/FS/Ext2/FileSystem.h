@@ -99,7 +99,8 @@ namespace Kernel
 		BAN::ErrorOr<uint32_t> reserve_free_block(uint32_t primary_bgd);
 		BAN::ErrorOr<void> release_block(uint32_t block);
 
-		BAN::HashMap<ino_t, BAN::RefPtr<Ext2Inode>>& inode_cache() { return m_inode_cache; }
+		BAN::ErrorOr<BAN::RefPtr<Ext2Inode>> open_inode(ino_t);
+		void remove_from_cache(ino_t);
 
 		const Ext2::Superblock& superblock() const { return m_superblock; }
 
@@ -155,6 +156,7 @@ namespace Kernel
 		BAN::RefPtr<Inode> m_root_inode;
 		BAN::Vector<uint32_t> m_superblock_backups;
 
+		Mutex m_inode_cache_lock;
 		BAN::HashMap<ino_t, BAN::RefPtr<Ext2Inode>> m_inode_cache;
 
 		BlockBufferManager m_buffer_manager;

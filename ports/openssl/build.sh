@@ -11,16 +11,16 @@ configure() {
 }
 
 post_install() {
-	rm -f "$BANAN_SYSROOT/etc/ssl/certs"/*
+	rm -f "$DESTDIR/etc/ssl/certs"/*
 
-	ln -svf "../cacert/cacert.pem" "$BANAN_SYSROOT/etc/ssl/cert.pem"
-	ln -svf "../../cacert/cacert.pem" "$BANAN_SYSROOT/etc/ssl/certs/ca-certificates.crt"
-	ln -svf "../../cacert/cacert.pem" "$BANAN_SYSROOT/etc/ssl/certs/ca-bundle.crt"
+	ln -svf "../cacert/cacert.pem" "$DESTDIR/etc/ssl/cert.pem"
+	ln -svf "../../cacert/cacert.pem" "$DESTDIR/etc/ssl/certs/ca-certificates.crt"
+	ln -svf "../../cacert/cacert.pem" "$DESTDIR/etc/ssl/certs/ca-bundle.crt"
 
 	openssl rehash "$BANAN_SYSROOT/etc/cacert/extracted"
 	find "$BANAN_SYSROOT/etc/cacert/extracted" -type l -print0 |
 	while IFS= read -r -d '' link; do
-		ln -s "../../cacert/extracted/$(readlink "$link")" "$BANAN_SYSROOT/etc/ssl/certs/${link##*/}"
+		ln -s "../../cacert/extracted/$(readlink "$link")" "$DESTDIR/etc/ssl/certs/${link##*/}"
 		rm "$link"
 	done
 }

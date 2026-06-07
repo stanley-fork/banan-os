@@ -1862,25 +1862,22 @@ namespace Kernel
 		sys_pselect_t arguments;
 		TRY(read_from_user(user_arguments, &arguments, sizeof(sys_pselect_t)));
 
-		MemoryRegion* readfd_region = nullptr;
-		MemoryRegion* writefd_region = nullptr;
-		MemoryRegion* errorfd_region = nullptr;
+		const int max_nfds = BAN::Math::min(m_open_file_descriptors.get_max_open_fd(), FD_SETSIZE) + 1;
+		if (arguments.nfds > max_nfds)
+			arguments.nfds = max_nfds;
 
-		BAN::ScopeGuard _([&] {
-			if (readfd_region)
-				readfd_region->unpin();
-			if (writefd_region)
-				writefd_region->unpin();
-			if (errorfd_region)
-				errorfd_region->unpin();
-		});
+		const auto init_fd_set = [](fd_set* user, fd_set* target) -> BAN::ErrorOr<void> {
+			if (user == nullptr)
+				FD_ZERO(target);
+			else
+				TRY(read_from_user(user, target, sizeof(fd_set)));
+			return {};
+		};
 
-		if (arguments.readfds)
-			readfd_region = TRY(validate_and_pin_pointer_access(arguments.readfds, sizeof(fd_set), true));
-		if (arguments.writefds)
-			writefd_region = TRY(validate_and_pin_pointer_access(arguments.writefds, sizeof(fd_set), true));
-		if (arguments.errorfds)
-			errorfd_region = TRY(validate_and_pin_pointer_access(arguments.errorfds, sizeof(fd_set), true));
+		fd_set rfds, wfds, efds;
+		TRY(init_fd_set(arguments.readfds,  &rfds));
+		TRY(init_fd_set(arguments.writefds, &wfds));
+		TRY(init_fd_set(arguments.errorfds, &efds));
 
 		const auto old_sigmask = Thread::current().m_signal_block_mask;
 		if (arguments.sigmask)
@@ -1902,36 +1899,39 @@ namespace Kernel
 				timeout.tv_nsec;
 		}
 
+		fd_set ret_rfds, ret_wfds, ret_efds;
+		FD_ZERO(&ret_rfds);
+		FD_ZERO(&ret_wfds);
+		FD_ZERO(&ret_efds);
+
 		{
-			fd_set rfds, wfds, efds;
-			FD_ZERO(&rfds);
-			FD_ZERO(&wfds);
-			FD_ZERO(&efds);
 
 			size_t return_value = 0;
 			for (int fd = 0; fd < arguments.nfds; fd++)
 			{
-				auto inode_or_error = m_open_file_descriptors.inode_of(fd);
-				if (inode_or_error.is_error())
+				const bool wantr = FD_ISSET(fd, &rfds);
+				const bool wantw = FD_ISSET(fd, &wfds);
+				const bool wante = FD_ISSET(fd, &efds);
+				if (!wantr && !wantw && !wante)
 					continue;
 
-				auto inode = inode_or_error.release_value();
-				if (arguments.readfds  && FD_ISSET(fd, arguments.readfds)  && inode->can_read())
-					{ FD_SET(fd, &rfds); return_value++; }
-				if (arguments.writefds && FD_ISSET(fd, arguments.writefds) && inode->can_write())
-					{ FD_SET(fd, &wfds); return_value++; }
-				if (arguments.errorfds && FD_ISSET(fd, arguments.errorfds) && inode->has_error())
-					{ FD_SET(fd, &efds); return_value++; }
+				auto inode = TRY(m_open_file_descriptors.inode_of(fd));
+				if (wantr && inode->can_read())
+					{ FD_SET(fd, &ret_rfds); return_value++; }
+				if (wantw && inode->can_write())
+					{ FD_SET(fd, &ret_wfds); return_value++; }
+				if (wante && inode->has_error())
+					{ FD_SET(fd, &ret_efds); return_value++; }
 			}
 
 			if (return_value || SystemTimer::get().ns_since_boot() >= waketime_ns)
 			{
 				if (arguments.readfds)
-					memcpy(arguments.readfds, &rfds, sizeof(fd_set));
+					TRY(write_to_user(arguments.readfds,  &ret_rfds, sizeof(fd_set)));
 				if (arguments.writefds)
-					memcpy(arguments.writefds, &wfds, sizeof(fd_set));
+					TRY(write_to_user(arguments.writefds, &ret_wfds, sizeof(fd_set)));
 				if (arguments.errorfds)
-					memcpy(arguments.errorfds, &efds, sizeof(fd_set));
+					TRY(write_to_user(arguments.errorfds, &ret_efds, sizeof(fd_set)));
 				return return_value;
 			}
 		}
@@ -1940,20 +1940,17 @@ namespace Kernel
 		for (int fd = 0; fd < arguments.nfds; fd++)
 		{
 			uint32_t events = 0;
-			if (arguments.readfds && FD_ISSET(fd, arguments.readfds))
+			if (FD_ISSET(fd, &rfds))
 				events |= EPOLLIN;
-			if (arguments.writefds && FD_ISSET(fd, arguments.writefds))
+			if (FD_ISSET(fd, &wfds))
 				events |= EPOLLOUT;
-			if (arguments.errorfds && FD_ISSET(fd, arguments.errorfds))
+			if (FD_ISSET(fd, &efds))
 				events |= EPOLLERR;
 			if (events == 0)
 				continue;
 
-			auto inode_or_error = m_open_file_descriptors.inode_of(fd);
-			if (inode_or_error.is_error())
-				continue;
-
-			TRY(epoll->ctl(EPOLL_CTL_ADD, fd, inode_or_error.release_value(), { .events = events, .data = { .fd = fd }}));
+			auto inode = TRY(m_open_file_descriptors.inode_of(fd));
+			TRY(epoll->ctl(EPOLL_CTL_ADD, fd, inode, { .events = events, .data = { .fd = fd }}));
 		}
 
 		BAN::Vector<epoll_event> event_buffer;
@@ -1961,25 +1958,24 @@ namespace Kernel
 
 		const size_t waited_events = TRY(epoll->wait(event_buffer.span(), waketime_ns));
 
-		if (arguments.readfds)
-			FD_ZERO(arguments.readfds);
-		if (arguments.writefds)
-			FD_ZERO(arguments.writefds);
-		if (arguments.errorfds)
-			FD_ZERO(arguments.errorfds);
-
 		size_t return_value = 0;
 		for (size_t i = 0; i < waited_events; i++)
 		{
 			const int fd = event_buffer[i].data.fd;
-			if (arguments.readfds && event_buffer[i].events & (EPOLLIN | EPOLLHUP))
-				{ FD_SET(fd, arguments.readfds);  return_value++; }
-			if (arguments.writefds && event_buffer[i].events & (EPOLLOUT))
-				{ FD_SET(fd, arguments.writefds); return_value++; }
-			if (arguments.errorfds && event_buffer[i].events & (EPOLLERR))
-				{ FD_SET(fd, arguments.errorfds); return_value++; }
+			if (FD_ISSET(fd, &rfds) && event_buffer[i].events & (EPOLLIN | EPOLLHUP))
+				{ FD_SET(fd, &ret_rfds); return_value++; }
+			if (FD_ISSET(fd, &wfds) && event_buffer[i].events & (EPOLLOUT))
+				{ FD_SET(fd, &ret_wfds); return_value++; }
+			if (FD_ISSET(fd, &efds) && event_buffer[i].events & (EPOLLERR))
+				{ FD_SET(fd, &ret_efds); return_value++; }
 		}
 
+		if (arguments.readfds)
+			TRY(write_to_user(arguments.readfds,  &ret_rfds, sizeof(fd_set)));
+		if (arguments.writefds)
+			TRY(write_to_user(arguments.writefds, &ret_wfds, sizeof(fd_set)));
+		if (arguments.errorfds)
+			TRY(write_to_user(arguments.errorfds, &ret_efds, sizeof(fd_set)));
 		return return_value;
 	}
 

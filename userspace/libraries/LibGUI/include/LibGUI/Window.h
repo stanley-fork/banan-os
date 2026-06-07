@@ -66,7 +66,7 @@ namespace LibGUI
 		uint32_t width() const { return m_width; }
 		uint32_t height() const { return m_height; }
 
-		void wait_events();
+		void wait_events(const timespec* timeout = nullptr);
 		void poll_events();
 
 		void set_socket_error_callback(BAN::Function<void()> callback)                                                       { m_socket_error_callback = callback; }

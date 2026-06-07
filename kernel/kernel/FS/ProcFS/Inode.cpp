@@ -95,19 +95,20 @@ namespace Kernel
 		return (m_process.*m_callback)();
 	}
 
-	BAN::ErrorOr<BAN::RefPtr<ProcROInode>> ProcROInode::create_new(size_t (*callback)(off_t, BAN::ByteSpan), TmpFileSystem& fs, mode_t mode, uid_t uid, gid_t gid)
+	BAN::ErrorOr<BAN::RefPtr<ProcROInode>> ProcROInode::create_new(BAN::ErrorOr<size_t> (*callback)(off_t, BAN::ByteSpan, void*), TmpFileSystem& fs, void* argument, mode_t mode, uid_t uid, gid_t gid)
 	{
 		auto inode_info = create_inode_info(Mode::IFREG | mode, uid, gid);
 
-		auto* inode_ptr = new ProcROInode(callback, fs, inode_info);
+		auto* inode_ptr = new ProcROInode(callback, fs, argument, inode_info);
 		if (inode_ptr == nullptr)
 			return BAN::Error::from_errno(ENOMEM);
 		return BAN::RefPtr<ProcROInode>::adopt(inode_ptr);
 	}
 
-	ProcROInode::ProcROInode(size_t (*callback)(off_t, BAN::ByteSpan), TmpFileSystem& fs, const TmpInodeInfo& inode_info)
+	ProcROInode::ProcROInode(BAN::ErrorOr<size_t> (*callback)(off_t, BAN::ByteSpan, void*), TmpFileSystem& fs, void* argument, const TmpInodeInfo& inode_info)
 		: TmpInode(fs, MUST(fs.allocate_inode(inode_info)), inode_info)
 		, m_callback(callback)
+		, m_argument(argument)
 	{
 		m_mode |= Inode::Mode::IFREG;
 	}
@@ -116,7 +117,7 @@ namespace Kernel
 	{
 		if (offset < 0)
 			return BAN::Error::from_errno(EINVAL);
-		return m_callback(offset, buffer);
+		return TRY(m_callback(offset, buffer, m_argument));
 	}
 
 	BAN::ErrorOr<BAN::RefPtr<ProcSymlinkInode>> ProcSymlinkInode::create_new(BAN::ErrorOr<BAN::String> (*callback)(void*), void (*destructor)(void*), void* data, TmpFileSystem& fs, mode_t mode, uid_t uid, gid_t gid)

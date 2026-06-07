@@ -18,5 +18,5 @@ build() {
 }
 
 install() {
-	make -C unix install "DESTDIR=$BANAN_SYSROOT" || exit 1
+	make -C unix install "DESTDIR=$DESTDIR" || exit 1
 }

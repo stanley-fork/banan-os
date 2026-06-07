@@ -74,8 +74,9 @@ build() {
 }
 
 install() {
-	meson install --destdir="$BANAN_SYSROOT" -C build || exit 1
+	meson install --destdir="$DESTDIR" -C build || exit 1
 
-	ln -sf osmesa.pc $BANAN_SYSROOT/usr/lib/pkgconfig/opengl.pc
-	ln -sf libOSMesa.so $BANAN_SYSROOT/usr/lib/libGL.so
+	mkdir -p "$DESTDIR/usr/lib/pkgconfig"
+	ln -sf osmesa.pc $DESTDIR/usr/lib/pkgconfig/opengl.pc
+	ln -sf libOSMesa.so $DESTDIR/usr/lib/libGL.so
 }

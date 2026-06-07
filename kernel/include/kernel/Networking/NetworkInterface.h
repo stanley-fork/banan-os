@@ -66,6 +66,9 @@ namespace Kernel
 		virtual BAN::ErrorOr<void> send_bytes(BAN::MACAddress destination, EtherType protocol, BAN::Span<const BAN::ConstByteSpan> payload) = 0;
 
 	private:
+		BAN::ErrorOr<long> ioctl_impl(int, void*) override;
+
+	private:
 		const Type m_type;
 		char m_name[10];
 

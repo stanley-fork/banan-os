@@ -256,6 +256,18 @@ namespace Kernel
 
 				break;
 			}
+			case ISR::GeneralProtectionFault:
+			{
+				const uint8_t* ip = reinterpret_cast<const uint8_t*>(interrupt_stack->ip);
+				for (const auto& safe_user : s_safe_user_page_faults)
+				{
+					if (ip < safe_user.ip_start || ip >= safe_user.ip_end)
+						continue;
+					interrupt_stack->ip = reinterpret_cast<vaddr_t>(safe_user.ip_fault);
+					return;
+				}
+				break;
+			}
 			case ISR::DeviceNotAvailable:
 			{
 				if (pid == 0 || !Thread::current().is_userspace())

@@ -26,5 +26,5 @@ configure() {
 }
 
 post_install() {
-	ln -sf $tcc_arch-tcc $BANAN_SYSROOT/usr/bin/tcc
+	ln -sf $tcc_arch-tcc $DESTDIR/usr/bin/tcc
 }

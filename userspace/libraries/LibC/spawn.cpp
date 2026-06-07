@@ -1,12 +1,8 @@
-#include <BAN/Atomic.h>
-
 #include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/banan-os.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 #define TODO_FUNC(name, ...) int name(__VA_ARGS__) { dwarnln("TODO: " #name); errno = ENOTSUP; return -1; }
@@ -205,20 +201,6 @@ int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t* __restrict file
 
 static int do_posix_spawn(pid_t* __restrict pid, const char* __restrict path, const posix_spawn_file_actions_t* file_actions, const posix_spawnattr_t* __restrict attrp, char* const argv[], char* const envp[], bool do_path_resolution)
 {
-	// MAP_SHARED | MAP_ANONYMOUS is not supported :D
-
-	const auto smo_key = smo_create(sizeof(int), PROT_READ | PROT_WRITE);
-	if (smo_key == -1)
-		return errno;
-
-	void* addr = smo_map(smo_key);
-	smo_delete(smo_key);
-	if (addr == MAP_FAILED)
-		return errno;
-
-	auto& child_status = *static_cast<BAN::Atomic<int>*>(addr);
-	child_status = INT_MAX;
-
 	const pid_t child_pid = fork();
 	if (child_pid == 0)
 	{
@@ -227,7 +209,6 @@ static int do_posix_spawn(pid_t* __restrict pid, const char* __restrict path, co
 				auto ret = __VA_ARGS__; \
 				if (ret != (err)) \
 					break; \
-				child_status = errno; \
 				exit(127); \
 			} while (false)
 
@@ -249,7 +230,7 @@ static int do_posix_spawn(pid_t* __restrict pid, const char* __restrict path, co
 			if (attrp->flags & POSIX_SPAWN_SETSIGDEF)
 				for (int sig = _SIGMIN; sig <= _SIGMAX; sig++)
 					if (attrp->sigdefault & (1ull << sig))
-						DIE_ON_ERROR(NULL, signal(sig, SIG_DFL));
+						DIE_ON_ERROR(SIG_ERR, signal(sig, SIG_DFL));
 
 			if (attrp->flags & POSIX_SPAWN_SETSIGMASK)
 				DIE_ON_ERROR(-1, sigprocmask(SIG_SETMASK, &attrp->sigmask, nullptr));
@@ -287,31 +268,13 @@ static int do_posix_spawn(pid_t* __restrict pid, const char* __restrict path, co
 
 #undef DIE_ON_ERROR
 
-		child_status = 0;
-
 		auto* func = do_path_resolution ? execvpe : execve;
 		func(path, argv, envp);
 		exit(127);
 	}
 
 	if (child_pid == -1)
-	{
-		munmap(addr, sizeof(int));
 		return errno;
-	}
-
-	while (child_status == INT_MAX)
-		sched_yield();
-
-	const int child_status_copy = child_status;
-	munmap(addr, sizeof(int));
-
-	if (child_status_copy != 0)
-	{
-		while (waitpid(child_pid, nullptr, 0) == -1 && errno == EINTR)
-			continue;
-		return child_status_copy;
-	}
 
 	if (pid != nullptr)
 		*pid = child_pid;

@@ -98,7 +98,8 @@ namespace BAN
 
 		struct EntryHash
 		{
-			constexpr bool operator()(const Key& a)
+			template<detail::HashMapFindable<Key, HASH, COMP> U>
+			constexpr bool operator()(const U& a)
 			{
 				return HASH()(a);
 			}
@@ -110,7 +111,8 @@ namespace BAN
 
 		struct EntryComp
 		{
-			constexpr bool operator()(const Entry& a, const Key& b)
+			template<detail::HashMapFindable<Key, HASH, COMP> U>
+			constexpr bool operator()(const Entry& a, const U& b)
 			{
 				return COMP()(a.key, b);
 			}

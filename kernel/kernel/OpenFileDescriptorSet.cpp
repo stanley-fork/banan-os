@@ -853,6 +853,15 @@ namespace Kernel
 		return inode->sendmsg(message, flags | (is_nonblock ? MSG_DONTWAIT : 0));
 	}
 
+	int OpenFileDescriptorSet::get_max_open_fd() const
+	{
+		LockGuard _(m_mutex);
+		for (int fd = m_open_files.size() - 1; fd > 0; fd--)
+			if (m_open_files[fd])
+				return fd;
+		return -1;
+	}
+
 	BAN::ErrorOr<VirtualFileSystem::File> OpenFileDescriptorSet::file_of(int fd) const
 	{
 		LockGuard _(m_mutex);

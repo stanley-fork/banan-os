@@ -9,5 +9,6 @@ configure() {
 }
 
 install() {
-	cp src/nyancat "$BANAN_SYSROOT/usr/bin/"
+	mkdir -p "$DESTDIR/usr/bin"
+	cp src/nyancat "$DESTDIR/usr/bin/"
 }

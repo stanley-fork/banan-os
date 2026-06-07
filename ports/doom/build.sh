@@ -18,6 +18,9 @@ build() {
 }
 
 install() {
-	cp doomgeneric/doomgeneric "${BANAN_SYSROOT}/bin/doom" || exit 1
-	cp ../doom1.wad "$BANAN_SYSROOT/home/user/" || exit 1
+	mkdir -p "$DESTDIR/usr/bin"
+	cp -vf doomgeneric/doomgeneric "$DESTDIR/usr/bin/doom"
+
+	mkdir -p "$DESTDIR/home/user"
+	cp -vf ../doom1.wad "$DESTDIR/home/user/"
 }

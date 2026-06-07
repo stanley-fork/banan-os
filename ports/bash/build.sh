@@ -16,7 +16,7 @@ CONFIGURE_OPTIONS=(
 )
 
 post_install() {
-	if [ ! -L $BANAN_SYSROOT/usr/bin/sh ]; then
-		ln -s bash $BANAN_SYSROOT/usr/bin/sh
+	if [ ! -L $DESTDIR/usr/bin/sh ]; then
+		ln -s bash $DESTDIR/usr/bin/sh
 	fi
 }
