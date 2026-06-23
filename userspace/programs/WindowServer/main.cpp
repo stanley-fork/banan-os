@@ -380,6 +380,7 @@ int main()
 			{
 				epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
 				window_server.remove_client_fd(client_fd);
+				close(client_fd);
 				continue;
 			}
 
@@ -395,6 +396,7 @@ int main()
 					dwarnln("send: {}", strerror(errno));
 					epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
 					window_server.remove_client_fd(client_fd);
+					close(client_fd);
 					break;
 				}
 
@@ -434,6 +436,7 @@ int main()
 					dwarnln("recv: {}", strerror(errno));
 					epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
 					window_server.remove_client_fd(client_fd);
+					close(client_fd);
 					break;
 				}
 				if (nrecv > 0)
@@ -494,6 +497,7 @@ int main()
 					dwarnln("client tried to send a {} byte packet", header.size);
 					epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
 					window_server.remove_client_fd(client_fd);
+					close(client_fd);
 					break;
 				}
 			}
