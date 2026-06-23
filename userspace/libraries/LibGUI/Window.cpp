@@ -63,10 +63,12 @@ namespace LibGUI
 
 		auto window = TRY(BAN::UniqPtr<Window>::create(server_fd, epoll_fd, attributes));
 
-		WindowPacket::WindowCreate create_packet;
-		create_packet.width = width;
-		create_packet.height = height;
-		create_packet.attributes = attributes;
+		WindowPacket::WindowCreate create_packet {
+			.width = width,
+			.height = height,
+			.attributes = attributes,
+			.title = {},
+		};
 		TRY(create_packet.title.append(title));
 		window->send_packet(create_packet, __FUNCTION__);
 
@@ -169,40 +171,46 @@ namespace LibGUI
 			);
 		}
 
-		WindowPacket::WindowInvalidate packet;
-		packet.x = x;
-		packet.y = y;
-		packet.width = width;
-		packet.height = height;
+		const WindowPacket::WindowInvalidate packet {
+			.x = static_cast<uint32_t>(x),
+			.y = static_cast<uint32_t>(y),
+			.width = width,
+			.height = height,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
 	void Window::set_mouse_relative(bool enabled)
 	{
-		WindowPacket::WindowSetMouseRelative packet;
-		packet.enabled = enabled;
+		const WindowPacket::WindowSetMouseRelative packet {
+			.enabled = enabled,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
 	void Window::set_fullscreen(bool fullscreen)
 	{
-		WindowPacket::WindowSetFullscreen packet;
-		packet.fullscreen = fullscreen;
+		const WindowPacket::WindowSetFullscreen packet {
+			.fullscreen = fullscreen,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
 	void Window::set_title(BAN::StringView title)
 	{
-		WindowPacket::WindowSetTitle packet;
+		WindowPacket::WindowSetTitle packet {
+			.title = {},
+		};
 		MUST(packet.title.append(title));
 		send_packet(packet, __FUNCTION__);
 	}
 
 	void Window::set_position(int32_t x, int32_t y)
 	{
-		WindowPacket::WindowSetPosition packet;
-		packet.x = x;
-		packet.y = y;
+		const WindowPacket::WindowSetPosition packet {
+			.x = x,
+			.y = y,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
@@ -217,11 +225,14 @@ namespace LibGUI
 
 	void Window::set_cursor(uint32_t width, uint32_t height, BAN::Span<const uint32_t> pixels, int32_t origin_x, int32_t origin_y)
 	{
-		WindowPacket::WindowSetCursor packet;
-		packet.width = width;
-		packet.height = height;
-		packet.origin_x = origin_x;
-		packet.origin_y = origin_y;
+		// TODO: no need to copy here
+		WindowPacket::WindowSetCursor packet {
+			.width = width,
+			.height = height,
+			.origin_x = origin_x,
+			.origin_y = origin_y,
+			.pixels = {},
+		};
 		MUST(packet.pixels.resize(pixels.size()));
 		for (size_t i = 0; i < packet.pixels.size(); i++)
 			packet.pixels[i] = pixels[i];
@@ -230,17 +241,19 @@ namespace LibGUI
 
 	void Window::set_min_size(uint32_t width, uint32_t height)
 	{
-		WindowPacket::WindowSetMinSize packet;
-		packet.width = width;
-		packet.height = height;
+		const WindowPacket::WindowSetMinSize packet {
+			.width = width,
+			.height = height,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
 	void Window::set_max_size(uint32_t width, uint32_t height)
 	{
-		WindowPacket::WindowSetMaxSize packet;
-		packet.width = width;
-		packet.height = height;
+		const WindowPacket::WindowSetMaxSize packet {
+			.width = width,
+			.height = height,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
@@ -254,9 +267,10 @@ namespace LibGUI
 
 	void Window::request_resize(uint32_t width, uint32_t height)
 	{
-		WindowPacket::WindowSetSize packet;
-		packet.width = width;
-		packet.height = height;
+		const WindowPacket::WindowSetSize packet {
+			.width = width,
+			.height = height,
+		};
 		send_packet(packet, __FUNCTION__);
 	}
 
