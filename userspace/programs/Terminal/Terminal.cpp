@@ -651,6 +651,9 @@ Rectangle Terminal::handle_csi(char ch)
 
 	auto& texture = m_window->texture();
 
+	const auto fg_color = m_colors_inverted ? m_bg_color : m_fg_color;
+	const auto bg_color = m_colors_inverted ? m_fg_color : m_bg_color;
+
 	switch (m_csi_info.param)
 	{
 	case 0:
@@ -706,8 +709,8 @@ Rectangle Terminal::handle_csi(char ch)
 				{
 					m_cells[i] = {
 						.codepoint = 0,
-						.fg_color = m_fg_color,
-						.bg_color = m_bg_color,
+						.fg_color = fg_color,
+						.bg_color = bg_color,
 						.bold = m_is_bold,
 					};
 				}
@@ -730,8 +733,8 @@ Rectangle Terminal::handle_csi(char ch)
 				{
 					m_cells[i] = {
 						.codepoint = 0,
-						.fg_color = m_fg_color,
-						.bg_color = m_bg_color,
+						.fg_color = fg_color,
+						.bg_color = bg_color,
 						.bold = m_is_bold,
 					};
 				}
@@ -754,8 +757,8 @@ Rectangle Terminal::handle_csi(char ch)
 				{
 					m_cells[i] = {
 						.codepoint = 0,
-						.fg_color = m_fg_color,
-						.bg_color = m_bg_color,
+						.fg_color = fg_color,
+						.bg_color = bg_color,
 						.bold = m_is_bold,
 					};
 				}
@@ -770,7 +773,7 @@ Rectangle Terminal::handle_csi(char ch)
 
 			for (size_t i = 0; i < rect_count; i++)
 			{
-				texture.fill_rect(rects[i].x, rects[i].y, rects[i].width, rects[i].height, m_bg_color);
+				texture.fill_rect(rects[i].x, rects[i].y, rects[i].width, rects[i].height, bg_color);
 				should_invalidate = should_invalidate.get_bounding_box(rects[i]);
 			}
 
@@ -785,8 +788,8 @@ Rectangle Terminal::handle_csi(char ch)
 			for (size_t i = s_col; i <= e_col; i++)
 				m_cells[m_cursor.y * cols() + i] = {
 					.codepoint = ' ',
-					.fg_color = m_fg_color,
-					.bg_color = m_bg_color,
+					.fg_color = fg_color,
+					.bg_color = bg_color,
 					.bold = m_is_bold,
 				};
 
@@ -796,7 +799,7 @@ Rectangle Terminal::handle_csi(char ch)
 			rect.width  = (m_csi_info.fields[0] == 1) ? m_cursor.x * m_font.width() : m_window->width() - rect.x;
 			rect.height = m_font.height();
 
-			texture.fill_rect(rect.x, rect.y, rect.width, rect.height, m_bg_color);
+			texture.fill_rect(rect.x, rect.y, rect.width, rect.height, bg_color);
 			should_invalidate = rect;
 
 			break;
@@ -814,13 +817,13 @@ Rectangle Terminal::handle_csi(char ch)
 				for (size_t col = 0; col < cols(); col++)
 					m_cells[row * cols() + col] = {
 						.codepoint = ' ',
-						.fg_color = m_fg_color,
-						.bg_color = m_bg_color,
+						.fg_color = fg_color,
+						.bg_color = bg_color,
 						.bold = m_is_bold,
 					};
 
 			texture.copy_horizontal_slice(dst_y, src_y, m_window->height() - dst_y);
-			texture.fill_rect(0, src_y, m_window->width(), count * m_font.height(), m_bg_color);
+			texture.fill_rect(0, src_y, m_window->width(), count * m_font.height(), bg_color);
 			should_invalidate = {
 				0,
 				src_y,
@@ -843,13 +846,13 @@ Rectangle Terminal::handle_csi(char ch)
 				for (size_t col = 0; col < cols(); col++)
 					m_cells[row * cols() + col] = {
 						.codepoint = ' ',
-						.fg_color = m_fg_color,
-						.bg_color = m_bg_color,
+						.fg_color = fg_color,
+						.bg_color = bg_color,
 						.bold = m_is_bold,
 					};
 
 			texture.copy_horizontal_slice(dst_y, src_y, m_window->height() - dst_y);
-			texture.fill_rect(0, m_window->height() - count * m_font.height(), m_window->width(), count * m_font.height(), m_bg_color);
+			texture.fill_rect(0, m_window->height() - count * m_font.height(), m_window->width(), count * m_font.height(), bg_color);
 			should_invalidate = {
 				0,
 				src_y,
@@ -871,13 +874,13 @@ Rectangle Terminal::handle_csi(char ch)
 			for (size_t i = m_cursor.x + count; i < cols(); i++)
 				m_cells[m_cursor.y * cols() + i] = {
 					.codepoint = ' ',
-					.fg_color = m_fg_color,
-					.bg_color = m_bg_color,
+					.fg_color = fg_color,
+					.bg_color = bg_color,
 					.bold = m_is_bold,
 				};
 
 			texture.copy_rect(dst_x, y, src_x, y, m_window->width() - src_x, m_font.height());
-			texture.fill_rect(m_window->width() - count * m_font.width(), y, count * m_font.width(), m_font.height(), m_bg_color);
+			texture.fill_rect(m_window->width() - count * m_font.width(), y, count * m_font.width(), m_font.height(), bg_color);
 			should_invalidate = {
 				dst_x,
 				y,
@@ -899,13 +902,13 @@ Rectangle Terminal::handle_csi(char ch)
 			for (size_t i = m_cursor.x; i < m_cursor.x + count; i++)
 				m_cells[m_cursor.y * cols() + i] = {
 					.codepoint = ' ',
-					.fg_color = m_fg_color,
-					.bg_color = m_bg_color,
+					.fg_color = fg_color,
+					.bg_color = bg_color,
 					.bold = m_is_bold,
 				};
 
 			texture.copy_rect(dst_x, y, src_x, y, m_window->width() - dst_x, m_font.height());
-			texture.fill_rect(src_x, y, count * m_font.width(), m_font.height(), m_bg_color);
+			texture.fill_rect(src_x, y, count * m_font.width(), m_font.height(), bg_color);
 			should_invalidate = {
 				src_x,
 				y,

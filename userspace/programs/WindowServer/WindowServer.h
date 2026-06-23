@@ -31,6 +31,8 @@ public:
 
 	BAN::ErrorOr<void> set_background_image(BAN::UniqPtr<LibImage::Image>);
 
+	void on_query_pointer(int fd, const LibGUI::WindowPacket::QueryPointer&);
+
 	void on_window_create(int fd, const LibGUI::WindowPacket::WindowCreate&);
 	void on_window_invalidate(int fd, const LibGUI::WindowPacket::WindowInvalidate&);
 	void on_window_set_position(int fd, const LibGUI::WindowPacket::WindowSetPosition&);
@@ -71,6 +73,7 @@ private:
 	void add_damaged_area_impl(Rectangle area);
 
 	bool resize_window(BAN::RefPtr<Window> window, uint32_t width, uint32_t height);
+	void move_window(BAN::RefPtr<Window> window, int32_t x, int32_t y);
 
 	BAN::RefPtr<Window> find_window_with_fd(int fd) const;
 	BAN::RefPtr<Window> find_hovered_window() const;

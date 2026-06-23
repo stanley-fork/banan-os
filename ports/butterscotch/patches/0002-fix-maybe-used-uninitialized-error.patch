@@ -1,0 +1,25 @@
+From 98fffc5330e51a0dbe25017653d46e15c185dc4b Mon Sep 17 00:00:00 2001
+From: Oskari Alaranta <oskari.alaranta@bananymous.com>
+Date: Mon, 22 Jun 2026 21:24:07 +0300
+Subject: [PATCH] fix maybe used uninitialized error
+
+---
+ src/desktop/backends/sdl2.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/desktop/backends/sdl2.c b/src/desktop/backends/sdl2.c
+index 91029a6..34716f8 100644
+--- a/src/desktop/backends/sdl2.c
++++ b/src/desktop/backends/sdl2.c
+@@ -50,7 +50,7 @@ bool platformGetScaledWindowSize(int32_t* outW, int32_t* outH) {
+ 
+ static void platformGetWindowScale(float *scale_x, float *scale_y) {
+     if (!scale_x || !scale_y) return;
+-    int32_t draw_w, draw_h;
++    int32_t draw_w = 0, draw_h = 0;
+     int logical_w, logical_h;
+     platformGetWindowSize(&draw_w, &draw_h);
+     SDL_GetWindowSize(window, &logical_w, &logical_h);
+-- 
+2.54.0
+

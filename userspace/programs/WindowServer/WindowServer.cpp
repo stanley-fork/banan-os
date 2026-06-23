@@ -40,6 +40,19 @@ BAN::ErrorOr<void> WindowServer::set_background_image(BAN::UniqPtr<LibImage::Ima
 	return {};
 }
 
+void WindowServer::on_query_pointer(int fd, const LibGUI::WindowPacket::QueryPointer&)
+{
+	const LibGUI::EventPacket::QueryPointerEvent event_packet { .event = {
+		.x = m_cursor.x,
+		.y = m_cursor.y,
+	}};
+	if (auto ret = append_serialized_packet(event_packet, fd); ret.is_error())
+	{
+		dwarnln("could not respond to query pointer request: {}", ret.error());
+		return;
+	}
+}
+
 void WindowServer::on_window_create(int fd, const LibGUI::WindowPacket::WindowCreate& packet)
 {
 	for (auto& window : m_client_windows)
@@ -75,10 +88,11 @@ void WindowServer::on_window_create(int fd, const LibGUI::WindowPacket::WindowCr
 	}
 
 	window->set_attributes(packet.attributes);
-	window->set_position({
-		static_cast<int32_t>((m_framebuffer.width - window->client_width()) / 2),
-		static_cast<int32_t>((m_framebuffer.height - window->client_height()) / 2),
-	});
+	move_window(
+		window,
+		(m_framebuffer.width - window->client_width()) / 2,
+		(m_framebuffer.height - window->client_height()) / 2
+	);
 
 	const LibGUI::EventPacket::ResizeWindowEvent event_packet {
 		.width  = static_cast<uint32_t>(window->client_width()),
@@ -151,10 +165,7 @@ void WindowServer::on_window_set_position(int fd, const LibGUI::WindowPacket::Wi
 	}
 
 	const auto old_client_area = target_window->full_area();
-	target_window->set_position({
-		.x = packet.x,
-		.y = packet.y,
-	});
+	move_window(target_window, packet.x, packet.y);
 
 	if (!target_window->get_attributes().shown)
 		return;
@@ -186,7 +197,7 @@ void WindowServer::on_window_set_attributes(int fd, const LibGUI::WindowPacket::
 		{
 			if (!resize_window(m_focused_window, m_non_full_screen_rect.width(), m_non_full_screen_rect.height()))
 				return;
-			m_focused_window->set_position({ m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y });
+			move_window(m_focused_window, m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y);
 		}
 
 		m_focused_window = nullptr;
@@ -310,7 +321,7 @@ void WindowServer::on_window_set_fullscreen(int fd, const LibGUI::WindowPacket::
 		{
 			if (!resize_window(m_focused_window, m_non_full_screen_rect.width(), m_non_full_screen_rect.height()))
 				return;
-			m_focused_window->set_position({ m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y });
+			move_window(m_focused_window, m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y);
 		}
 
 		const LibGUI::EventPacket::WindowFullscreenEvent event_packet { .event = {
@@ -344,7 +355,7 @@ void WindowServer::on_window_set_fullscreen(int fd, const LibGUI::WindowPacket::
 		const auto old_area = target_window->client_area();
 		if (!resize_window(target_window, m_framebuffer.width, m_framebuffer.height))
 			return;
-		target_window->set_position({ 0, 0 });
+		move_window(target_window, 0, 0);
 		m_non_full_screen_rect = old_area;
 	}
 
@@ -510,7 +521,7 @@ void WindowServer::on_key_event(LibInput::KeyEvent event)
 			{
 				if (!resize_window(m_focused_window, m_non_full_screen_rect.width(), m_non_full_screen_rect.height()))
 					return;
-				m_focused_window->set_position({ m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y });
+				move_window(m_focused_window, m_non_full_screen_rect.min_x, m_non_full_screen_rect.min_y);
 			}
 			m_state = State::Normal;
 		}
@@ -521,7 +532,7 @@ void WindowServer::on_key_event(LibInput::KeyEvent event)
 				const auto old_area = m_focused_window->client_area();
 				if (!resize_window(m_focused_window, m_framebuffer.width, m_framebuffer.height))
 					return;
-				m_focused_window->set_position({ 0, 0 });
+				move_window(m_focused_window, 0, 0);
 				m_non_full_screen_rect = old_area;
 			}
 			m_state = State::Fullscreen;
@@ -656,7 +667,7 @@ void WindowServer::on_mouse_button(LibInput::MouseButtonEvent event)
 					dwarnln("could not resize client window {}", ret.error());
 					return;
 				}
-				m_focused_window->set_position({ resize_area.min_x, resize_area.min_y + m_focused_window->title_bar_height() });
+				move_window(m_focused_window, resize_area.min_x, resize_area.min_y + m_focused_window->title_bar_height());
 
 				const LibGUI::EventPacket::ResizeWindowEvent event_packet {
 					.width  = static_cast<uint32_t>(m_focused_window->client_width()),
@@ -723,10 +734,11 @@ void WindowServer::on_mouse_move_impl(int32_t new_x, int32_t new_y)
 		case State::Moving:
 		{
 			const auto old_window_area = m_focused_window->full_area();
-			m_focused_window->set_position({
+			move_window(
+				m_focused_window,
 				m_focused_window->client_x() + event.rel_x,
-				m_focused_window->client_y() + event.rel_y,
-			});
+				m_focused_window->client_y() + event.rel_y
+			);
 			add_damaged_area(old_window_area);
 			add_damaged_area(m_focused_window->full_area());
 			break;
@@ -1579,11 +1591,14 @@ void WindowServer::sync()
 	{
 		static int32_t dir_x = 7;
 		static int32_t dir_y = 4;
+
 		auto old_window = m_focused_window->full_area();
-		m_focused_window->set_position({
+
+		move_window(
+			m_focused_window,
 			m_focused_window->client_x() + dir_x,
-			m_focused_window->client_y() + dir_y,
-		});
+			m_focused_window->client_y() + dir_y
+		);
 
 		add_damaged_area(old_window);
 		add_damaged_area(m_focused_window->full_area());
@@ -1715,6 +1730,19 @@ bool WindowServer::resize_window(BAN::RefPtr<Window> window, uint32_t width, uin
 	}
 
 	return true;
+}
+
+void WindowServer::move_window(BAN::RefPtr<Window> window, int32_t x, int32_t y)
+{
+	window->set_position({ x, y });
+
+	const LibGUI::EventPacket::WindowMoveEvent event_packet {
+		.event = {
+			.x = window->client_x(),
+			.y = window->client_y(),
+		},
+	};
+	(void)append_serialized_packet(event_packet, window->client_fd());
 }
 
 BAN::ErrorOr<void> WindowServer::add_client_fd(int fd)
