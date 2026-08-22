@@ -21,6 +21,8 @@ namespace Kernel
 
 		void clear() override;
 
+		BAN::ErrorOr<void> set_terminal_driver(BAN::RefPtr<TerminalDriver>);
+
 	protected:
 		BAN::StringView name() const override { return m_name; }
 		bool putchar_impl(uint8_t ch) override;

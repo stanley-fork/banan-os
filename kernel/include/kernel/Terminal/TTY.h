@@ -100,9 +100,9 @@ namespace Kernel
 		termios m_termios;
 
 	protected:
-		Mutex m_mutex;
+		Mutex m_input_mutex;
 
-		Mutex m_write_lock;
+		RecursiveSpinLock m_write_lock;
 		ThreadBlocker m_write_blocker;
 	};
 

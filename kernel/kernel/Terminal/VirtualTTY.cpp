@@ -50,17 +50,48 @@ namespace Kernel
 		, m_foreground(driver->palette()[15])
 		, m_background(driver->palette()[0])
 	{
-		m_width = m_terminal_driver->width();
-		m_height = m_terminal_driver->height();
-		update_winsize(m_width, m_height);
+		MUST(set_terminal_driver(driver));
+	}
 
-		m_buffer = new Cell[m_width * m_height];
-		ASSERT(m_buffer);
+	BAN::ErrorOr<void> VirtualTTY::set_terminal_driver(BAN::RefPtr<TerminalDriver> terminal_driver)
+	{
+		const uint32_t new_width = terminal_driver->width();
+		const uint32_t new_height = terminal_driver->height();
+
+		SpinLockGuard _(m_write_lock);
+
+		if (m_width != new_width || m_height != new_height)
+		{
+			Cell* new_buffer = new Cell[new_width * new_height];
+			ASSERT(new_buffer);
+
+			for (uint32_t i = 0; i < new_width * m_height; i++)
+				new_buffer[i] = { .foreground = m_foreground, .background = m_background, .codepoint = ' ' };
+
+			for (uint32_t y = 0; y < BAN::Math::min<uint32_t>(m_height, new_height); y++)
+				for (uint32_t x = 0; x < BAN::Math::min<uint32_t>(m_width, new_width); x++)
+					new_buffer[y * new_width + x] = m_buffer[y * m_width + x];
+
+			delete[] m_buffer;
+			m_buffer = new_buffer;
+			m_width = new_width;
+			m_height = new_height;
+		}
+
+		m_terminal_driver = terminal_driver;
+
+		for (uint32_t y = 0; y < m_height; y++)
+			for (uint32_t x = 0; x < m_width; x++)
+				render_from_buffer(x, y);
+
+		update_winsize(new_width, new_height);
+
+		return {};
 	}
 
 	void VirtualTTY::clear()
 	{
-		LockGuard _(m_write_lock);
+		SpinLockGuard _(m_write_lock);
 		for (uint32_t i = 0; i < m_width * m_height; i++)
 			m_buffer[i] = { .foreground = m_foreground, .background = m_background, .codepoint = ' ' };
 		m_terminal_driver->clear(m_background);
@@ -70,46 +101,14 @@ namespace Kernel
 	{
 		if (!m_terminal_driver->has_font())
 			return BAN::Error::from_errno(EINVAL);
-
-		{
-			LockGuard _(m_write_lock);
-
-			TRY(m_terminal_driver->set_font(BAN::move(font)));
-
-			uint32_t new_width = m_terminal_driver->width();
-			uint32_t new_height = m_terminal_driver->height();
-
-			if (m_width != new_width || m_height != new_height)
-			{
-				Cell* new_buffer = new Cell[new_width * new_height];
-				ASSERT(new_buffer);
-
-				for (uint32_t i = 0; i < new_width * m_height; i++)
-					new_buffer[i] = { .foreground = m_foreground, .background = m_background, .codepoint = ' ' };
-
-				for (uint32_t y = 0; y < BAN::Math::min<uint32_t>(m_height, new_height); y++)
-					for (uint32_t x = 0; x < BAN::Math::min<uint32_t>(m_width, new_width); x++)
-						new_buffer[y * new_width + x] = m_buffer[y * m_width + x];
-
-				delete[] m_buffer;
-				m_buffer = new_buffer;
-				m_width = new_width;
-				m_height = new_height;
-			}
-
-			for (uint32_t y = 0; y < m_height; y++)
-				for (uint32_t x = 0; x < m_width; x++)
-					render_from_buffer(x, y);
-		}
-
-		update_winsize(m_width, m_height);
-
+		TRY(m_terminal_driver->set_font(BAN::move(font)));
+		MUST(set_terminal_driver(m_terminal_driver));
 		return {};
 	}
 
 	void VirtualTTY::reset_ansi()
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 		m_ansi_state = {
 			.nums = { -1, -1, -1, -1, -1 },
 			.index = 0,
@@ -120,7 +119,7 @@ namespace Kernel
 
 	void VirtualTTY::handle_ansi_csi_color(uint8_t value)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 
 		auto& palette = m_terminal_driver->palette();
 
@@ -203,7 +202,8 @@ namespace Kernel
 
 	void VirtualTTY::handle_ansi_csi(uint8_t ch)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
+
 		switch (ch)
 		{
 			case '0' ... '9':
@@ -445,7 +445,7 @@ namespace Kernel
 
 	void VirtualTTY::render_from_buffer(uint32_t x, uint32_t y)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 		ASSERT(x < m_width && y < m_height);
 		const auto& cell = m_buffer[y * m_width + x];
 		m_terminal_driver->putchar_at(cell.codepoint, x, y, cell.foreground, cell.background);
@@ -453,7 +453,7 @@ namespace Kernel
 
 	void VirtualTTY::putchar_at(uint32_t codepoint, uint32_t x, uint32_t y)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 		ASSERT(x < m_width && y < m_height);
 		auto& cell = m_buffer[y * m_width + x];
 		cell.codepoint = codepoint;
@@ -464,6 +464,8 @@ namespace Kernel
 
 	void VirtualTTY::scroll_if_needed()
 	{
+		ASSERT(m_write_lock.current_processor_has_lock());
+
 		while (m_row >= m_height)
 		{
 			memmove(m_buffer, m_buffer + m_width, m_width * (m_height - 1) * sizeof(Cell));
@@ -487,7 +489,7 @@ namespace Kernel
 
 	void VirtualTTY::putcodepoint(uint32_t codepoint)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 
 		switch (codepoint)
 		{
@@ -533,7 +535,7 @@ namespace Kernel
 
 	bool VirtualTTY::putchar_impl(uint8_t ch)
 	{
-		ASSERT(m_write_lock.is_locked_by_current_thread());
+		ASSERT(m_write_lock.current_processor_has_lock());
 
 		uint32_t codepoint = ch;
 

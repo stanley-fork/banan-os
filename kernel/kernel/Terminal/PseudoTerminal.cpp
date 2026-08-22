@@ -146,7 +146,7 @@ namespace Kernel
 		auto slave = m_slave.lock();
 		if (!slave)
 			return BAN::Error::from_errno(EIO);
-		LockGuard _(slave->m_mutex);
+		LockGuard _(slave->m_input_mutex);
 		for (size_t i = 0; i < buffer.size(); i++)
 			slave->handle_input_byte(buffer[i]);
 		return buffer.size();

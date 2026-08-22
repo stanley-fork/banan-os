@@ -6,6 +6,7 @@
 #include <kernel/FS/DevFS/FileSystem.h>
 #include <kernel/FS/VirtualFileSystem.h>
 #include <kernel/Input/InputDevice.h>
+#include <kernel/Lock/BlockableSpinLock.h>
 #include <kernel/Lock/LockGuard.h>
 #include <kernel/Process.h>
 #include <kernel/Terminal/TTY.h>
@@ -220,7 +221,7 @@ namespace Kernel
 		if (ansi_c_str == nullptr)
 			return;
 
-		LockGuard _(m_mutex);
+		LockGuard _(m_input_mutex);
 		while (*ansi_c_str)
 			handle_input_byte(*ansi_c_str++);
 		after_write();
@@ -269,7 +270,7 @@ namespace Kernel
 		bool should_flush = false;
 		bool force_echo = false;
 
-		LockGuard _(m_mutex);
+		LockGuard _(m_input_mutex);
 
 		if (!(termios.c_lflag & ICANON))
 			should_flush = true;
@@ -377,7 +378,8 @@ namespace Kernel
 
 		const auto termios = get_termios();
 
-		LockGuard _(m_write_lock);
+		SpinLockGuard _(m_write_lock);
+
 		if (termios.c_oflag & OPOST)
 		{
 			if ((termios.c_oflag & ONLCR) && ch == NL)
@@ -385,14 +387,16 @@ namespace Kernel
 			if ((termios.c_oflag & OCRNL) && ch == CR)
 				return putchar_impl(NL);
 		}
+
 		return putchar_impl(ch);
 	}
 
 	BAN::ErrorOr<size_t> TTY::read_impl(off_t, BAN::ByteSpan buffer)
 	{
-		LockGuard _(m_mutex);
+		LockGuard _(m_input_mutex);
+
 		while (!m_output.flush)
-			TRY(Thread::current().block_or_eintr_indefinite(m_output.thread_blocker, &m_mutex));
+			TRY(Thread::current().block_or_eintr_indefinite(m_output.thread_blocker, &m_input_mutex));
 
 		if (m_output.buffer->empty())
 		{
@@ -424,13 +428,14 @@ namespace Kernel
 
 	BAN::ErrorOr<size_t> TTY::write_impl(off_t, BAN::ConstByteSpan buffer)
 	{
-		LockGuard write_guard(m_write_lock);
+		SpinLockGuard _(m_write_lock);
 
 		while (!can_write())
 		{
 			if (master_has_closed())
 				return BAN::Error::from_errno(EIO);
-			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &m_write_lock));
+			BlockableSpinLock block(m_write_lock);
+			TRY(Thread::current().block_or_eintr_indefinite(m_write_blocker, &block));
 		}
 
 		size_t written = 0;
@@ -447,15 +452,12 @@ namespace Kernel
 
 	void TTY::putchar_current(uint8_t ch)
 	{
-		ASSERT(s_tty);
+		auto tty = s_tty;
+		ASSERT(tty);
 
-		while (!s_tty->m_write_lock.try_lock())
-			Processor::pause();
-
-		s_tty->putchar(ch);
-		s_tty->after_write();
-
-		s_tty->m_write_lock.unlock();
+		SpinLockGuard _(tty->m_write_lock);
+		tty->putchar(ch);
+		tty->after_write();
 	}
 
 	bool TTY::is_initialized()
