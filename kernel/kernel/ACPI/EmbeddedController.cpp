@@ -30,9 +30,9 @@ namespace Kernel::ACPI
 		CMD_QUERY     = 0x84,
 	};
 
-	BAN::ErrorOr<BAN::UniqPtr<EmbeddedController>> EmbeddedController::create(AML::Scope&& scope, uint16_t command_port, uint16_t data_port, BAN::Optional<uint8_t> gpe)
+	BAN::ErrorOr<BAN::UniqPtr<EmbeddedController>> EmbeddedController::create(AML::Scope&& scope, uint16_t command_port, uint16_t data_port)
 	{
-		auto* embedded_controller_ptr = new EmbeddedController(BAN::move(scope), command_port, data_port, gpe.has_value());
+		auto* embedded_controller_ptr = new EmbeddedController(BAN::move(scope), command_port, data_port);
 		if (embedded_controller_ptr == nullptr)
 			return BAN::Error::from_errno(ENOMEM);
 
@@ -41,16 +41,6 @@ namespace Kernel::ACPI
 
 		auto embedded_controller = BAN::UniqPtr<EmbeddedController>::adopt(embedded_controller_ptr);
 		embedded_controller->m_thread = thread;
-
-		if (gpe.has_value())
-			TRY(ACPI::get().register_gpe_handler(gpe.value(), &handle_gpe_wrapper, embedded_controller.ptr()));
-		else
-		{
-			// FIXME: Restructure EC such that SCI_EVT can be polled.
-			//        Simple solution would be spawning another thread,
-			//        but that feels too hacky.
-			dwarnln("TODO: SCI_EVT polling without GPE");
-		}
 
 		return embedded_controller;
 	}
@@ -95,26 +85,25 @@ namespace Kernel::ACPI
 
 	uint8_t EmbeddedController::read_one(uint16_t port)
 	{
-		wait_status_bit(STS_OBF, 1);
+		wait_status_bit(STS_OBF, true);
 		return IO::inb(port);
 	}
 
 	void EmbeddedController::write_one(uint16_t port, uint8_t value)
 	{
-		wait_status_bit(STS_IBF, 0);
+		wait_status_bit(STS_IBF, false);
 		IO::outb(port, value);
 	}
 
-	void EmbeddedController::wait_status_bit(uint8_t bit, uint8_t value)
+	void EmbeddedController::wait_status_bit(uint8_t mask, bool set)
 	{
 		// FIXME: timeouts
-		const uint8_t mask = 1 << bit;
-		const uint8_t comp = value ? mask : 0;
+		const uint8_t comp = set ? mask : 0;
 		while ((IO::inb(m_command_port) & mask) != comp)
 			continue;
 	}
 
-	void EmbeddedController::handle_gpe_wrapper(void* embedded_controller)
+	void EmbeddedController::handle_gpe_trampoline(void* embedded_controller)
 	{
 		static_cast<EmbeddedController*>(embedded_controller)->handle_gpe();
 	}
@@ -217,7 +206,7 @@ namespace Kernel::ACPI
 
 		for (;;)
 		{
-			Command* const command = m_queued_command.has_value() ? m_queued_command.value() : nullptr;
+			auto* const command = m_queued_command.value_or(nullptr);
 			m_queued_command.clear();
 
 			if (command == nullptr)
@@ -226,27 +215,22 @@ namespace Kernel::ACPI
 				continue;
 			}
 
+			// TODO: use burst mode
+
 			m_mutex.unlock();
 
-			if (command)
-			{
-				// TODO: use burst mode
-
-				write_one(m_command_port, command->command);
-				if (command->data1.has_value())
-					write_one(m_data_port, command->data1.value());
-				if (command->data2.has_value())
-					write_one(m_data_port, command->data2.value());
-				if (command->response)
-					*command->response = read_one(m_data_port);
-
-				m_mutex.lock();
-				command->done = true;
-				m_thread_blocker.unblock();
-				m_mutex.unlock();
-			}
+			write_one(m_command_port, command->command);
+			if (command->data1.has_value())
+				write_one(m_data_port, command->data1.value());
+			if (command->data2.has_value())
+				write_one(m_data_port, command->data2.value());
+			if (command->response)
+				*command->response = read_one(m_data_port);
 
 			m_mutex.lock();
+
+			command->done = true;
+			m_thread_blocker.unblock();
 		}
 	}
 

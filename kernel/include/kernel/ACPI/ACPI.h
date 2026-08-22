@@ -54,6 +54,7 @@ namespace Kernel::ACPI
 
 		BAN::ErrorOr<void> initialize_embedded_controller(const AML::Scope& embedded_controller);
 		BAN::ErrorOr<void> initialize_embedded_controllers();
+		void initialize_embedded_controller_gpes();
 
 		BAN::Optional<GAS> find_gpe_block(size_t index);
 		bool enable_gpe(uint8_t gpe);

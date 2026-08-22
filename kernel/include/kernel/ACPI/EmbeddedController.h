@@ -14,7 +14,7 @@ namespace Kernel::ACPI
 	class EmbeddedController
 	{
 	public:
-		static BAN::ErrorOr<BAN::UniqPtr<EmbeddedController>> create(AML::Scope&& scope, uint16_t command_port, uint16_t data_port, BAN::Optional<uint8_t> gpe);
+		static BAN::ErrorOr<BAN::UniqPtr<EmbeddedController>> create(AML::Scope&& scope, uint16_t command_port, uint16_t data_port);
 		~EmbeddedController();
 
 		BAN::ErrorOr<uint8_t> read_byte(uint8_t offset);
@@ -22,21 +22,21 @@ namespace Kernel::ACPI
 
 		const AML::Scope& scope() const { return m_scope; }
 
+		static void handle_gpe_trampoline(void*);
+
 	private:
-		EmbeddedController(AML::Scope&& scope, uint16_t command_port, uint16_t data_port, bool has_gpe)
+		EmbeddedController(AML::Scope&& scope, uint16_t command_port, uint16_t data_port)
 			: m_scope(BAN::move(scope))
 			, m_command_port(command_port)
 			, m_data_port(data_port)
-			, m_has_gpe(has_gpe)
 		{ }
 
 	private:
-		void wait_status_bit(uint8_t bit, uint8_t value);
+		void wait_status_bit(uint8_t mask, bool set);
 
 		uint8_t read_one(uint16_t port);
 		void write_one(uint16_t port, uint8_t value);
 
-		static void handle_gpe_wrapper(void*);
 		void handle_gpe();
 
 		BAN::ErrorOr<void> call_query_method(uint8_t notification);
@@ -57,7 +57,6 @@ namespace Kernel::ACPI
 		const AML::Scope m_scope;
 		const uint16_t m_command_port;
 		const uint16_t m_data_port;
-		const bool m_has_gpe;
 
 		Mutex m_mutex;
 		ThreadBlocker m_thread_blocker;

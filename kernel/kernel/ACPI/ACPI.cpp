@@ -784,26 +784,6 @@ acpi_release_global_lock:
 
 	BAN::ErrorOr<void> ACPI::initialize_embedded_controller(const AML::Scope& embedded_controller)
 	{
-		BAN::Optional<uint8_t> gpe_int;
-
-		do {
-			auto [gpe_path, gpe_obj] = TRY(m_namespace->find_named_object(embedded_controller, TRY(AML::NameString::from_string("_GPE"_sv)), true));
-			if (gpe_obj == nullptr)
-			{
-				dwarnln("EC {} does not have _GPE", embedded_controller);
-				break;
-			}
-
-			auto gpe = TRY(AML::evaluate_node(gpe_path, gpe_obj->node));
-			if (gpe.type == AML::Node::Type::Package)
-			{
-				dwarnln("TODO: EC {} has package _GPE");
-				break;
-			}
-
-			gpe_int = TRY(AML::convert_node(BAN::move(gpe), AML::ConvInteger, -1)).as.integer.value;
-		} while (false);
-
 		auto [crs_path, crs_obj] = TRY(m_namespace->find_named_object(embedded_controller, TRY(AML::NameString::from_string("_CRS"_sv)), true));
 		if (crs_obj == nullptr)
 		{
@@ -857,7 +837,7 @@ acpi_release_global_lock:
 		const auto data_port = TRY(extract_io_port(crs_buffer));
 		const auto command_port = TRY(extract_io_port(crs_buffer));
 
-		TRY(m_embedded_controllers.push_back(TRY(EmbeddedController::create(TRY(embedded_controller.copy()), command_port, data_port, gpe_int))));
+		TRY(m_embedded_controllers.push_back(TRY(EmbeddedController::create(TRY(embedded_controller.copy()), command_port, data_port))));
 		return {};
 	}
 
@@ -875,6 +855,33 @@ acpi_release_global_lock:
 		);
 
 		return {};
+	}
+
+	void ACPI::initialize_embedded_controller_gpes()
+	{
+		const auto initialize_gpe = [this](EmbeddedController& embedded_controller) -> BAN::ErrorOr<void> {
+			auto [gpe_path, gpe_obj] = TRY(m_namespace->find_named_object(embedded_controller.scope(), TRY(AML::NameString::from_string("_GPE"_sv)), true));
+			if (gpe_obj == nullptr)
+			{
+				dprintln("EC {} does not have _GPE", embedded_controller.scope());
+				return {};
+			}
+
+			auto gpe = TRY(AML::evaluate_node(gpe_path, gpe_obj->node));
+			if (gpe.type == AML::Node::Type::Package)
+			{
+				dwarnln("TODO: EC {} has package _GPE");
+				return {};
+			}
+
+			const auto gpe_int = TRY(AML::convert_node(BAN::move(gpe), AML::ConvInteger, -1)).as.integer.value;
+			TRY(register_gpe_handler(gpe_int, &EmbeddedController::handle_gpe_trampoline, &embedded_controller));
+
+			return {};
+		};
+
+		for (auto& embedded_controller : m_embedded_controllers)
+			(void)initialize_gpe(*embedded_controller);
 	}
 
 	BAN::ErrorOr<void> ACPI::register_gpe_handler(uint8_t gpe, void (*callback)(void*), void* argument)
@@ -996,57 +1003,27 @@ acpi_release_global_lock:
 			// FIXME: add support for GPE blocks inside the ACPI namespace
 		}
 
-		if (auto ret = initialize_embedded_controllers(); ret.is_error())
-			dwarnln("Failed to initialize Embedded Controllers: {}", ret.error());
-
-		if (auto ret = m_namespace->post_load_initialize(); ret.is_error())
-			dwarnln("Failed to initialize ACPI namespace: {}", ret.error());
-
-		auto [pic_path, pic_obj] = TRY(m_namespace->find_named_object({}, TRY(AML::NameString::from_string("\\_PIC"_sv))));
-		if (pic_obj && pic_obj->node.type == AML::Node::Type::Method)
-		{
-			auto& pic_node = pic_obj->node;
-			if (pic_node.as.method.arg_count != 1)
-			{
-				dwarnln("Method \\_PIC has {} arguments, expected 1", pic_node.as.method.arg_count);
-				return BAN::Error::from_errno(EINVAL);
-			}
-
-			AML::Reference arg_ref;
-			arg_ref.node.type = AML::Node::Type::Integer;
-			arg_ref.node.as.integer.value = InterruptController::get().is_using_apic() ? 1 : 0;
-			arg_ref.ref_count = 2;
-
-			BAN::Array<AML::Reference*, 7> arguments(nullptr);
-			arguments[0] = &arg_ref; // method call should not delete argument
-			TRY(AML::method_call(pic_path, pic_node, BAN::move(arguments)));
-		}
-
-		dprintln("Evaluated \\_PIC({})", InterruptController::get().is_using_apic() ? 1 : 0);
-
 		uint8_t irq = fadt().sci_int;
 		if (auto ret = InterruptController::get().reserve_irq(irq); ret.is_error())
 			dwarnln("Could not enable ACPI interrupt: {}", ret.error());
 		else
 		{
-			auto hex_sv_to_int =
-				[](BAN::StringView sv) -> BAN::Optional<uint32_t>
+			const auto hex_sv_to_int = [](BAN::StringView sv) -> BAN::Optional<uint32_t> {
+				uint32_t ret = 0;
+				for (char c : sv)
 				{
-					uint32_t ret = 0;
-					for (char c : sv)
-					{
-						ret <<= 4;
-						if (c >= '0' && c <= '9')
-							ret += c - '0';
-						else if (c >= 'A' && c <= 'F')
-							ret += c - 'A' + 10;
-						else if (c >= 'a' && c <= 'f')
-							ret += c - 'a' + 10;
-						else
-							return {};
-					}
-					return ret;
-				};
+					ret <<= 4;
+					if (c >= '0' && c <= '9')
+						ret += c - '0';
+					else if (c >= 'A' && c <= 'F')
+						ret += c - 'A' + 10;
+					else if (c >= 'a' && c <= 'f')
+						ret += c - 'a' + 10;
+					else
+						return {};
+				}
+				return ret;
+			};
 
 			auto [gpe_scope, gpe_obj] = TRY(m_namespace->find_named_object({}, TRY(AML::NameString::from_string("\\_GPE"))));
 			if (gpe_obj && gpe_obj->node.is_scope())
@@ -1094,9 +1071,40 @@ acpi_release_global_lock:
 				dwarnln("Failed to create ACPI thread, power button will not work: {}", thread_or_error.error());
 			else if (auto ret = Processor::scheduler().add_thread(thread_or_error.value()); ret.is_error())
 				dwarnln("Failed to create ACPI thread, power button will not work: {}", ret.error());
+			else
+				dprintln("Initialized ACPI interrupts");
 		}
 
-		dprintln("Initialized ACPI interrupts");
+		if (auto ret = initialize_embedded_controllers(); ret.is_error())
+			dwarnln("Failed to initialize Embedded Controllers: {}", ret.error());
+
+		if (auto ret = m_namespace->post_load_initialize(); ret.is_error())
+			dwarnln("Failed to initialize ACPI namespace: {}", ret.error());
+
+		// NOTE: We cannot initialize EC GPEs before the post init is done, but post init does need ECs initialized
+		initialize_embedded_controller_gpes();
+
+		auto [pic_path, pic_obj] = TRY(m_namespace->find_named_object({}, TRY(AML::NameString::from_string("\\_PIC"_sv))));
+		if (pic_obj && pic_obj->node.type == AML::Node::Type::Method)
+		{
+			auto& pic_node = pic_obj->node;
+			if (pic_node.as.method.arg_count != 1)
+			{
+				dwarnln("Method \\_PIC has {} arguments, expected 1", pic_node.as.method.arg_count);
+				return BAN::Error::from_errno(EINVAL);
+			}
+
+			AML::Reference arg_ref;
+			arg_ref.node.type = AML::Node::Type::Integer;
+			arg_ref.node.as.integer.value = InterruptController::get().is_using_apic() ? 1 : 0;
+			arg_ref.ref_count = 2;
+
+			BAN::Array<AML::Reference*, 7> arguments(nullptr);
+			arguments[0] = &arg_ref; // method call should not delete argument
+			TRY(AML::method_call(pic_path, pic_node, BAN::move(arguments)));
+
+			dprintln("Evaluated \\_PIC({})", InterruptController::get().is_using_apic() ? 1 : 0);
+		}
 
 		if (InterruptController::get().is_using_apic())
 		{
