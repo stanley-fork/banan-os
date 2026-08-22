@@ -494,8 +494,23 @@ namespace Kernel::ACPI::AML
 
 				return TRY(embedded_controller->read_byte(offset));
 			}
-			case GAS::AddressSpaceID::SMBus:
 			case GAS::AddressSpaceID::SystemCMOS:
+				if (byte_offset >= 64)
+				{
+					dwarnln("CMOS read from offset 0x{H}", byte_offset);
+					return BAN::Error::from_errno(ENOTSUP);
+				}
+				switch (access_size)
+				{
+					case 1:
+						IO::outb(0x70, offset);
+						return IO::inb(0x71);
+					default:
+						dwarnln("{} byte read from CMOS offset {2H}", access_size, byte_offset);
+						return BAN::Error::from_errno(EINVAL);
+				}
+				ASSERT_NOT_REACHED();
+			case GAS::AddressSpaceID::SMBus:
 			case GAS::AddressSpaceID::PCIBarTarget:
 			case GAS::AddressSpaceID::IPMI:
 			case GAS::AddressSpaceID::GeneralPurposeIO:
@@ -581,8 +596,24 @@ namespace Kernel::ACPI::AML
 				TRY(embedded_controller->write_byte(offset, value));
 				return {};
 			}
-			case GAS::AddressSpaceID::SMBus:
 			case GAS::AddressSpaceID::SystemCMOS:
+				if (byte_offset >= 64)
+				{
+					dwarnln("CMOS write to offset 0x{H}", byte_offset);
+					return BAN::Error::from_errno(ENOTSUP);
+				}
+				switch (access_size)
+				{
+					case 1:
+						IO::outb(0x70, offset);
+						IO::outb(0x71, value);
+						break;
+					default:
+						dwarnln("{} byte write to CMOS offset {2H}", access_size, byte_offset);
+						return BAN::Error::from_errno(EINVAL);
+				}
+				return {};
+			case GAS::AddressSpaceID::SMBus:
 			case GAS::AddressSpaceID::PCIBarTarget:
 			case GAS::AddressSpaceID::IPMI:
 			case GAS::AddressSpaceID::GeneralPurposeIO:
