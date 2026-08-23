@@ -62,9 +62,6 @@ namespace Kernel
 	};
 
 	template<typename Lock>
-	class SpinLockGuardAsMutex;
-
-	template<typename Lock>
 	class SpinLockGuard
 	{
 		BAN_NON_COPYABLE(SpinLockGuard);
@@ -85,7 +82,6 @@ namespace Kernel
 	private:
 		Lock& m_lock;
 		InterruptState m_state;
-		friend class SpinLockGuardAsMutex<Lock>;
 	};
 
 }
