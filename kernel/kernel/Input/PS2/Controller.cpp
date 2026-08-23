@@ -319,11 +319,18 @@ namespace Kernel::Input
 					if (crs_obj == nullptr)
 						return PS2ResourceSetting {};
 
+					const auto crs = TRY(ACPI::AML::evaluate_node(crs_path, crs_obj->node));
+					if (crs.type != ACPI::AML::Node::Type::Buffer)
+					{
+						dwarnln("PS/2 _CRS is not a buffer, but {}", crs);
+						return BAN::Error::from_errno(EINVAL);
+					}
+
 					PS2ResourceSetting result;
 					result.type = type;
 
 					BAN::Optional<ACPI::ResourceData> data;
-					ACPI::ResourceParser parser({ crs_obj->node.as.str_buf->bytes, static_cast<size_t>(crs_obj->node.as.str_buf->size) });
+					ACPI::ResourceParser parser({ crs.as.str_buf->bytes, static_cast<size_t>(crs.as.str_buf->size) });
 					while ((data = parser.get_next()).has_value())
 					{
 						switch (data->type)
