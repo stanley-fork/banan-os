@@ -343,6 +343,7 @@ namespace Kernel
 				using HDAudio::AFGWidget;
 				case AFGWidget::Type::OutputConverter:
 				case AFGWidget::Type::Mixer:
+				case AFGWidget::Type::Selector:
 				case AFGWidget::Type::PinComplex:
 					break;
 				default:
@@ -439,6 +440,9 @@ namespace Kernel
 					}
 					break;
 
+				case AFGWidget::Type::Selector:
+					break;
+
 				case AFGWidget::Type::PinComplex:
 					// enable output and H-Phn
 					TRY(m_controller->send_command({
@@ -525,6 +529,7 @@ namespace Kernel
 
 				case AFGWidget::Type::OutputConverter:
 				case AFGWidget::Type::Mixer:
+				case AFGWidget::Type::Selector:
 					break;
 
 				case AFGWidget::Type::PinComplex:
