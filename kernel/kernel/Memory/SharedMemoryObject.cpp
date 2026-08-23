@@ -87,6 +87,9 @@ namespace Kernel
 				return BAN::Error::from_errno(ENOENT);
 		}
 
+		if (size == 0)
+			return BAN::Error::from_errno(EINVAL);
+
 		const auto& process = Process::current();
 		const uid_t uid = process.credentials().euid();
 		const gid_t gid = process.credentials().egid();
