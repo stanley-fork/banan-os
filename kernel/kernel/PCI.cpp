@@ -912,10 +912,10 @@ namespace Kernel::PCI
 		}
 
 		// disable io/mem space while reading bar
-		uint16_t command = device.read_word(PCI_REG_COMMAND);
+		const uint16_t command = device.read_word(PCI_REG_COMMAND);
 		device.write_word(PCI_REG_COMMAND, command & ~(PCI_CMD_IO_SPACE | PCI_CMD_MEM_SPACE));
 
-		uint8_t offset = 0x10 + bar_num * 4;
+		const uint8_t offset = 0x10 + bar_num * 4;
 
 		uint64_t addr = device.read_dword(offset);
 
@@ -923,6 +923,13 @@ namespace Kernel::PCI
 		uint32_t size = device.read_dword(offset);
 		size = ~size + 1;
 		device.write_dword(offset, addr);
+
+		if (size == 0)
+		{
+			device.write_word(PCI_REG_COMMAND, command);
+			dwarnln("BAR{} has size 0", bar_num);
+			return BAN::Error::from_errno(EINVAL);
+		}
 
 		// determine bar type
 		BarType type = BarType::INVALID;
@@ -956,8 +963,7 @@ namespace Kernel::PCI
 		TRY(region->initialize());
 
 		// restore old command register and enable correct IO/MEM space
-		command |= (type == BarType::IO) ? PCI_CMD_IO_SPACE : PCI_CMD_MEM_SPACE;
-		device.write_word(PCI_REG_COMMAND, command);
+		device.write_word(PCI_REG_COMMAND, command | ((type == BarType::IO) ? PCI_CMD_IO_SPACE : PCI_CMD_MEM_SPACE));
 
 #if DEBUG_PCI
 		dprintln("created BAR region for PCI {2H}:{2H}.{2H}",
@@ -997,7 +1003,7 @@ namespace Kernel::PCI
 		if (m_type == BarType::IO)
 			return {};
 
-		size_t needed_pages = BAN::Math::div_round_up<size_t>(m_size, PAGE_SIZE);
+		const size_t needed_pages = BAN::Math::div_round_up<size_t>(m_size, PAGE_SIZE);
 		m_vaddr = PageTable::kernel().reserve_free_contiguous_pages(needed_pages, KERNEL_OFFSET);
 		if (m_vaddr == 0)
 			return BAN::Error::from_errno(ENOMEM);
