@@ -63,7 +63,7 @@ namespace Kernel
 				}
 			}, s_instance
 		));
-		MUST(Processor::scheduler().add_thread(updater_thread));
+		Processor::scheduler().add_thread(updater_thread);
 
 		auto* disk_cache_drop_thread = MUST(Thread::create_kernel(
 			[](void* _devfs)
@@ -93,7 +93,7 @@ namespace Kernel
 				}
 			}, s_instance
 		));
-		MUST(Processor::scheduler().add_thread(disk_cache_drop_thread));
+		Processor::scheduler().add_thread(disk_cache_drop_thread);
 
 		auto* disk_sync_thread = MUST(Thread::create_kernel(
 			[](void* _devfs)
@@ -129,7 +129,7 @@ namespace Kernel
 				}
 			}, s_instance
 		));
-		MUST(Processor::scheduler().add_thread(disk_sync_thread));
+		Processor::scheduler().add_thread(disk_sync_thread);
 	}
 
 	void DevFileSystem::initiate_disk_cache_drop()

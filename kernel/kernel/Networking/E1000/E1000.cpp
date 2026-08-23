@@ -95,11 +95,8 @@ namespace Kernel
 		auto* thread = TRY(Thread::create_kernel([](void* e1000_ptr) {
 			static_cast<E1000*>(e1000_ptr)->receive_thread();
 		}, this));
-		if (auto ret = Processor::scheduler().add_thread(thread); ret.is_error())
-		{
-			delete thread;
-			return ret.release_error();
-		}
+
+		Processor::scheduler().add_thread(thread);
 		m_thread_is_dead = false;
 
 		return {};

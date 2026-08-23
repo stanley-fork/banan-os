@@ -37,7 +37,7 @@ namespace Kernel::ACPI
 			return BAN::Error::from_errno(ENOMEM);
 
 		auto* thread = TRY(Thread::create_kernel([](void* ec) { static_cast<EmbeddedController*>(ec)->thread_task(); }, embedded_controller_ptr));
-		TRY(Processor::scheduler().add_thread(thread));
+		Processor::scheduler().add_thread(thread);
 
 		auto embedded_controller = BAN::UniqPtr<EmbeddedController>::adopt(embedded_controller_ptr);
 		embedded_controller->m_thread = thread;

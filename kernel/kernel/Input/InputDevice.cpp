@@ -307,8 +307,7 @@ namespace Kernel
 	BAN::ErrorOr<void> KeyboardDevice::initialize_tty_thread()
 	{
 		auto* thread = TRY(Thread::create_kernel(tty_keyboard_thread, nullptr));
-		ASSERT(thread);
-		TRY(Processor::scheduler().add_thread(thread));
+		Processor::scheduler().add_thread(thread);
 		return {};
 	}
 

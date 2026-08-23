@@ -218,7 +218,7 @@ namespace Kernel
 		}
 
 		m_port_updater = TRY(Thread::create_kernel([](void* data) { reinterpret_cast<USBHubDriver*>(data)->port_updater_task(); }, this));
-		TRY(Processor::scheduler().add_thread(m_port_updater));
+		Processor::scheduler().add_thread(m_port_updater);
 
 		return {};
 	}

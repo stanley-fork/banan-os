@@ -7,6 +7,7 @@
 #include <kernel/InterruptStack.h>
 #include <kernel/Lock/Mutex.h>
 #include <kernel/Memory/VirtualRange.h>
+#include <kernel/SchedulerThreadNode.h>
 
 #include <LibELF/AuxiliaryVector.h>
 
@@ -192,7 +193,7 @@ namespace Kernel
 		vaddr_t                    m_fsbase               { 0 };
 		vaddr_t                    m_gsbase               { 0 };
 
-		SchedulerThreadNode*       m_scheduler_node       { nullptr };
+		SchedulerThreadNode        m_scheduler_node;
 
 		YieldRegisters             m_yield_registers      { };
 

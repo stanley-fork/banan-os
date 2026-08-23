@@ -551,7 +551,7 @@ namespace Kernel::Input
 				static_cast<PS2DeviceInitInfo*>(info)->controller->device_initialize_task(info);
 			}, &info
 		));
-		TRY(Processor::scheduler().add_thread(init_thread));
+		Processor::scheduler().add_thread(init_thread);
 
 		while (!info.thread_started)
 			Processor::pause();

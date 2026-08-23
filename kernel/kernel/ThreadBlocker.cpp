@@ -37,7 +37,7 @@ namespace Kernel
 			node->block_chain_prev = nullptr;
 			node->block_chain_next = nullptr;
 
-			Processor::scheduler().unblock_thread(node);
+			Processor::scheduler().unblock_thread(node->thread);
 
 			node = next;
 		}

@@ -240,6 +240,7 @@ namespace Kernel
 
 	Thread::Thread(pid_t tid, Process* process)
 		: m_tid(tid), m_process(process)
+		, m_scheduler_node(this)
 	{
 		if (!s_default_sse_storage_initialized)
 			initialize_default_sse_storage();

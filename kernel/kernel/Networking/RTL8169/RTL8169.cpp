@@ -75,11 +75,8 @@ namespace Kernel
 		auto* thread = TRY(Thread::create_kernel([](void* rtl8169_ptr) {
 			static_cast<RTL8169*>(rtl8169_ptr)->receive_thread();
 		}, this));
-		if (auto ret = Processor::scheduler().add_thread(thread); ret.is_error())
-		{
-			delete thread;
-			return ret.release_error();
-		}
+
+		Processor::scheduler().add_thread(thread);
 		m_rx_thread_is_dead = false;
 
 		return {};

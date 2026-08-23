@@ -45,7 +45,7 @@ namespace Kernel
 				reinterpret_cast<TCPSocket*>(socket_ptr)->process_task();
 			}, socket.ptr()
 		));
-		TRY(Processor::scheduler().add_thread(socket->m_thread));
+		Processor::scheduler().add_thread(socket->m_thread);
 		// hack to keep socket alive until its process starts
 		socket->ref();
 		return socket;

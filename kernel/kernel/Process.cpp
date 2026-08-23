@@ -237,9 +237,8 @@ namespace Kernel
 #endif
 		}
 
-		// NOTE: make sure the last two `MUST`s don't fail
+		// NOTE: make sure the last `MUST` doesn't fail
 		TRY(process->m_threads.reserve(1));
-		TRY(Processor::scheduler().bind_thread_to_processor(thread, Processor::current_id()));
 
 		{
 			SpinLockGuard _(s_process_lock);
@@ -247,7 +246,7 @@ namespace Kernel
 		}
 
 		MUST(process->m_threads.push_back(thread));
-		MUST(Processor::scheduler().add_thread(thread));
+		Processor::scheduler().add_thread(thread);
 
 		process_deleter.disable();
 		thread_deleter.disable();
@@ -877,9 +876,8 @@ namespace Kernel
 		Thread* thread = TRY(Thread::current().clone(forked, sp, ip));
 		BAN::ScopeGuard thread_deleter([thread] { delete thread; });
 
-		// NOTE: make sure the last two `MUST`s don't fail
+		// NOTE: make sure the last `MUST` doesn't fail
 		TRY(forked->m_threads.reserve(1));
-		TRY(Processor::scheduler().bind_thread_to_processor(thread, Processor::current_id()));
 
 		{
 			SpinLockGuard _(s_process_lock);
@@ -905,7 +903,7 @@ namespace Kernel
 		ASSERT(this == &Process::current());
 
 		MUST(forked->m_threads.push_back(thread));
-		MUST(Processor::scheduler().add_thread(thread));
+		Processor::scheduler().add_thread(thread);
 
 		process_deleter.disable();
 		thread_deleter.disable();
@@ -1072,14 +1070,6 @@ namespace Kernel
 #endif
 			}
 
-			// NOTE: bind new thread to this processor so it wont be rescheduled before end of this function
-			//       and so that adding the thread to the scheduler cannot fail
-			if (auto ret = Scheduler::bind_thread_to_processor(new_thread, Processor::current_id()); ret.is_error())
-			{
-				Processor::set_interrupt_state(InterruptState::Enabled);
-				delete new_thread;
-				return ret.release_error();
-			}
 
 			RWLockWRGuard wr_guard(m_memory_region_lock);
 
@@ -1103,7 +1093,9 @@ namespace Kernel
 			m_threads.front()->m_process = nullptr;
 			m_threads.front()->give_keep_alive_page_table(BAN::move(m_page_table));
 
-			MUST(Processor::scheduler().add_thread(new_thread));
+			// NOTE: bind new thread to this processor so it wont be rescheduled before end of this function
+			Scheduler::bind_thread_to_processor(new_thread, Processor::current_id());
+			Processor::scheduler().add_thread(new_thread);
 			m_threads.front() = new_thread;
 
 			for (size_t i = 0; i < sizeof(m_signal_handlers) / sizeof(*m_signal_handlers); i++)
@@ -3580,12 +3572,7 @@ namespace Kernel
 		LockGuard _1(m_process_lock);
 
 		TRY(m_threads.push_back(thread));
-		if (auto ret = Processor::scheduler().add_thread(thread); ret.is_error())
-		{
-			m_threads.pop_back();
-			delete thread;
-			return ret.release_error();
-		}
+		Processor::scheduler().add_thread(thread);
 
 		return thread->tid();
 	}

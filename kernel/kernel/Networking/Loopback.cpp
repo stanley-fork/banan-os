@@ -25,11 +25,8 @@ namespace Kernel
 		auto* thread = TRY(Thread::create_kernel([](void* loopback_ptr) {
 			static_cast<LoopbackInterface*>(loopback_ptr)->receive_thread();
 		}, loopback_ptr));
-		if (auto ret = Processor::scheduler().add_thread(thread); ret.is_error())
-		{
-			delete thread;
-			return ret.release_error();
-		}
+
+		Processor::scheduler().add_thread(thread);
 		loopback->m_thread_is_dead = false;
 
 		loopback->set_ipv4_address({ 127, 0, 0, 1 });
