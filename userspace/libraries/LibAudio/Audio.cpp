@@ -23,25 +23,17 @@ namespace LibAudio
 		return result;
 	}
 
-	BAN::ErrorOr<Audio> Audio::load(BAN::StringView path)
+	BAN::ErrorOr<Audio> Audio::create(BAN::UniqPtr<AudioStream>&& audio_stream)
 	{
-		Audio result(TRY(AudioStream::load(path)));
-		TRY(result.initialize(256 * 1024));
+		Audio result(BAN::move(audio_stream));
+		TRY(result.initialize(result.m_audio_stream->channels() * result.m_audio_stream->sample_rate()));
 		return result;
 	}
 
-	BAN::ErrorOr<Audio> Audio::random(uint32_t samples)
+	BAN::ErrorOr<Audio> Audio::load(BAN::StringView path)
 	{
-		Audio result;
-		TRY(result.initialize(samples));
-
-		result.m_audio_buffer->sample_rate = 48000;
-		result.m_audio_buffer->channels = 1;
-
-		for (size_t i = 0; i < samples - 1; i++)
-			result.m_audio_buffer->samples[i] = (rand() - RAND_MAX / 2) / (RAND_MAX / 2.0);
-		result.m_audio_buffer->head = samples - 1;
-
+		Audio result(TRY(AudioStream::load(path)));
+		TRY(result.initialize(result.m_audio_stream->channels() * result.m_audio_stream->sample_rate()));
 		return result;
 	}
 

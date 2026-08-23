@@ -30,8 +30,8 @@ namespace LibAudio
 
 	public:
 		static BAN::ErrorOr<Audio> create(uint32_t channels, uint32_t sample_rate, uint32_t sample_frames);
+		static BAN::ErrorOr<Audio> create(BAN::UniqPtr<AudioStream>&&);
 		static BAN::ErrorOr<Audio> load(BAN::StringView path);
-		static BAN::ErrorOr<Audio> random(uint32_t samples);
 		~Audio() { clear(); }
 
 		Audio(Audio&& other) { *this = BAN::move(other); }

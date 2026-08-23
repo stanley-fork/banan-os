@@ -2,6 +2,7 @@ set(LIBAUDIO_SOURCES
 	Audio.cpp
 	AudioStream.cpp
 	AudioStreams/WAVAudioStream.cpp
+	AudioStreams/SineWaveAudioStream.cpp
 )
 
 add_library(libaudio ${LIBAUDIO_SOURCES})
