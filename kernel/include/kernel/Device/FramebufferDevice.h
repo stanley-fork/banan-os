@@ -6,15 +6,22 @@
 namespace Kernel
 {
 
+	class BGAController;
+
 	class FramebufferDevice : public CharacterDevice
 	{
 	public:
+		static BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> create(paddr_t paddr, uint32_t width, uint32_t height, uint32_t pitch, uint8_t bpp);
+		static BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> create(BAN::RefPtr<BGAController>);
 		static BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> create_from_boot_framebuffer();
 		static BAN::RefPtr<FramebufferDevice> boot_framebuffer();
 		~FramebufferDevice();
 
 		uint32_t width() const { return m_width; }
 		uint32_t height() const { return m_height; }
+		uint8_t bpp() const { return m_bpp; }
+
+		BAN::ErrorOr<void> set_bga_controller(BAN::RefPtr<BGAController>);
 
 		uint32_t get_pixel(uint32_t x, uint32_t y) const;
 		void set_pixel(uint32_t x, uint32_t y, uint32_t rgb);
@@ -50,14 +57,16 @@ namespace Kernel
 	private:
 		const BAN::String m_name;
 
-		vaddr_t			m_video_memory_vaddr { 0 };
-		const paddr_t	m_video_memory_paddr;
-		const uint32_t	m_width;
-		const uint32_t	m_height;
-		const uint32_t	m_pitch;
-		const uint8_t	m_bpp;
+		vaddr_t m_video_memory_vaddr { 0 };
+		paddr_t m_video_memory_paddr { 0 };
+
+		uint32_t m_width  { 0 };
+		uint32_t m_height { 0 };
+		uint32_t m_pitch  { 0 };
+		uint8_t  m_bpp    { 0 };
 
 		BAN::UniqPtr<VirtualRange> m_video_buffer;
+		BAN::RefPtr<BGAController> m_bga_controller;
 
 		friend class FramebufferMemoryRegion;
 	};

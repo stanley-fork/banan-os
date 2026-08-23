@@ -21,6 +21,7 @@ namespace Kernel
 
 		void clear() override;
 
+		bool is_vtty() const override { return true; }
 		BAN::ErrorOr<void> set_terminal_driver(BAN::RefPtr<TerminalDriver>);
 
 	protected:

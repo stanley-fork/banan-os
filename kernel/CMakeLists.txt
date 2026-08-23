@@ -41,6 +41,7 @@ set(KERNEL_SOURCES
 	kernel/FS/USTARModule.cpp
 	kernel/FS/VirtualFileSystem.cpp
 	kernel/GDT.cpp
+	kernel/Graphics/BGA.cpp
 	kernel/IDT.cpp
 	kernel/Input/InputDevice.cpp
 	kernel/Input/PS2/Controller.cpp

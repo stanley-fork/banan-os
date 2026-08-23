@@ -2,6 +2,7 @@
 #include <kernel/Device/DeviceNumbers.h>
 #include <kernel/Device/FramebufferDevice.h>
 #include <kernel/FS/DevFS/FileSystem.h>
+#include <kernel/Graphics/BGA.h>
 #include <kernel/Memory/Heap.h>
 #include <kernel/Terminal/FramebufferTerminal.h>
 
@@ -26,19 +27,14 @@ namespace Kernel
 		return s_boot_framebuffer;
 	}
 
-	BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> FramebufferDevice::create_from_boot_framebuffer()
+	BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> FramebufferDevice::create(paddr_t paddr, uint32_t width, uint32_t height, uint32_t pitch, uint8_t bpp)
 	{
-		ASSERT(g_boot_info.framebuffer.type == FramebufferInfo::Type::RGB);
-		if (g_boot_info.framebuffer.bpp != 24 && g_boot_info.framebuffer.bpp != 32)
+		if (bpp != 24 && bpp != 32)
 			return BAN::Error::from_errno(ENOTSUP);
 		auto* device_ptr = new FramebufferDevice(
 			0660, 0, 900,
 			makedev(DeviceNumber::Framebuffer, get_framebuffer_device_index()),
-			g_boot_info.framebuffer.address,
-			g_boot_info.framebuffer.width,
-			g_boot_info.framebuffer.height,
-			g_boot_info.framebuffer.pitch,
-			g_boot_info.framebuffer.bpp
+			paddr, width, height, pitch, bpp
 		);
 		if (device_ptr == nullptr)
 			return BAN::Error::from_errno(ENOMEM);
@@ -47,6 +43,33 @@ namespace Kernel
 		DevFileSystem::get().add_device(device);
 		s_boot_framebuffer = device;
 		return device;
+	}
+
+	BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> FramebufferDevice::create(BAN::RefPtr<BGAController> bga_controller)
+	{
+		const auto fix_info = bga_controller->get_fb_fix_info();
+		const auto var_info = bga_controller->get_fb_var_info();
+		auto controller = TRY(create(
+			fix_info.mem_start,
+			var_info.xres,
+			var_info.yres,
+			fix_info.pitch,
+			var_info.bpp
+		));
+		controller->m_bga_controller = bga_controller;
+		return controller;
+	}
+
+	BAN::ErrorOr<BAN::RefPtr<FramebufferDevice>> FramebufferDevice::create_from_boot_framebuffer()
+	{
+		s_boot_framebuffer = TRY(create(
+			g_boot_info.framebuffer.address,
+			g_boot_info.framebuffer.width,
+			g_boot_info.framebuffer.height,
+			g_boot_info.framebuffer.pitch,
+			g_boot_info.framebuffer.bpp
+		));
+		return s_boot_framebuffer;
 	}
 
 	FramebufferDevice::FramebufferDevice(mode_t mode, uid_t uid, gid_t gid, dev_t rdev, paddr_t paddr, uint32_t width, uint32_t height, uint32_t pitch, uint8_t bpp)
@@ -65,16 +88,20 @@ namespace Kernel
 	{
 		if (m_video_memory_vaddr == 0)
 			return;
-		size_t video_memory_pages = range_page_count(m_video_memory_paddr, m_height * m_pitch);
+		const size_t video_memory_bytes = m_bga_controller ? m_bga_controller->get_fb_fix_info().mem_size : m_height * m_pitch;
+		const size_t video_memory_pages = range_page_count(m_video_memory_paddr, video_memory_bytes);
 		PageTable::kernel().unmap_range(m_video_memory_vaddr, video_memory_pages * PAGE_SIZE);
 	}
 
 	BAN::ErrorOr<void> FramebufferDevice::initialize()
 	{
-		size_t video_memory_pages = range_page_count(m_video_memory_paddr, m_height * m_pitch);
+		const size_t video_memory_bytes = m_bga_controller ? m_bga_controller->get_fb_fix_info().mem_size : m_height * m_pitch;
+		const size_t video_memory_pages = range_page_count(m_video_memory_paddr, video_memory_bytes);
+
 		m_video_memory_vaddr = PageTable::kernel().reserve_free_contiguous_pages(video_memory_pages, KERNEL_OFFSET);
 		if (m_video_memory_vaddr == 0)
 			return BAN::Error::from_errno(ENOMEM);
+
 		PageTable::kernel().map_range_at(
 			m_video_memory_paddr & PAGE_ADDR_MASK,
 			m_video_memory_vaddr,
@@ -86,10 +113,41 @@ namespace Kernel
 		m_video_buffer = TRY(VirtualRange::create_to_vaddr_range(
 			PageTable::kernel(),
 			{ KERNEL_OFFSET, UINTPTR_MAX },
-			BAN::Math::div_round_up<size_t>(m_width * m_height * (BANAN_FB_BPP / 8), PAGE_SIZE) * PAGE_SIZE,
+			video_memory_pages * PAGE_SIZE,
 			PageTable::Flags::ReadWrite | PageTable::Flags::Present,
 			false
 		));
+
+		return {};
+	}
+
+	BAN::ErrorOr<void> FramebufferDevice::set_bga_controller(BAN::RefPtr<BGAController> bga_controller)
+	{
+		ASSERT(!m_bga_controller);
+
+		if (auto var_info = bga_controller->get_fb_var_info(); var_info.bpp != 32)
+		{
+			var_info.bpp = 32;
+			TRY(bga_controller->set_fb_var_info(var_info));
+		}
+
+		const auto fix_info = bga_controller->get_fb_fix_info();
+		const auto var_info = bga_controller->get_fb_var_info();
+
+		ASSERT(m_video_memory_vaddr);
+		PageTable::kernel().unmap_range(m_video_memory_vaddr, m_height * m_pitch);
+
+		m_video_memory_vaddr = 0;
+		m_video_memory_paddr = fix_info.mem_start;
+
+		m_width  = var_info.xres;
+		m_height = var_info.yres;
+		m_pitch  = fix_info.pitch;
+		m_bpp    = var_info.bpp;
+
+		m_bga_controller = bga_controller;
+
+		TRY(initialize());
 
 		return {};
 	}

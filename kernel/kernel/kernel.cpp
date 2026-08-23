@@ -68,6 +68,8 @@ static bool should_disable_serial(BAN::StringView full_command_line)
 extern bool g_disable_debug;
 static ParsedCommandLine cmdline;
 
+static bool s_has_early_console { false };
+
 static void parse_command_line()
 {
 	auto full_command_line = Kernel::g_boot_info.command_line.sv();
@@ -160,7 +162,24 @@ extern "C" void kernel_main(uint32_t boot_magic, uint32_t boot_info)
 	if (auto ret = TerminalDriver::initialize_from_boot_info(); ret.is_error())
 		dprintln("failed to initialize terminal driver: {}", ret.error());
 	else
-		dprintln("terminal driver initialized");
+	{
+		MUST(VirtualTTY::create(g_terminal_driver));
+		dprintln("Virtual TTY initialized");
+	}
+
+	if (Serial::has_devices())
+	{
+		Serial::initialize_devices();
+		dprintln("Serial devices initialized");
+	}
+
+	if (auto ret = DevFileSystem::get().root_inode()->find_inode(cmdline.console); !ret.is_error())
+	{
+		auto console = ret.release_value();
+		ASSERT(console->is_tty());
+		static_cast<Kernel::TTY*>(console.ptr())->set_as_current();
+		s_has_early_console = true;
+	}
 
 	if (!cmdline.disable_smp)
 		InterruptController::get().initialize_multiprocessor();
@@ -170,18 +189,6 @@ extern "C" void kernel_main(uint32_t boot_magic, uint32_t boot_info)
 
 	MUST(SharedMemoryObjectManager::initialize());
 	dprintln("Shared memory object system initialized");
-
-	if (Serial::has_devices())
-	{
-		Serial::initialize_devices();
-		dprintln("Serial devices initialized");
-	}
-
-	if (g_terminal_driver)
-	{
-		auto vtty = MUST(VirtualTTY::create(g_terminal_driver));
-		dprintln("Virtual TTY initialized");
-	}
 
 	Random::initialize();
 	dprintln("RNG initialized");
@@ -212,10 +219,6 @@ static void init2(void*)
 	SystemTimer::get().initialize_tsc();
 
 	ProcFileSystem::get().post_scheduler_initialize();
-
-	auto console = MUST(DevFileSystem::get().root_inode()->find_inode(cmdline.console));
-	ASSERT(console->is_tty());
-	static_cast<Kernel::TTY*>(console.ptr())->set_as_current();
 
 	// This only initializes PCIManager by enumerating available devices and choosing PCIe/legacy
 	// ACPI might require PCI access during its namespace initialization
@@ -256,6 +259,32 @@ static void init2(void*)
 	PCI::PCIManager::get().initialize_devices(cmdline.disable_usb);
 	dprintln("PCI devices initialized");
 
+	if (!s_has_early_console)
+	{
+		auto console_or_error = DevFileSystem::get().root_inode()->find_inode(cmdline.console);
+		if (!console_or_error.is_error())
+		{
+			auto console = console_or_error.release_value();
+			ASSERT(console->is_tty());
+			static_cast<TTY*>(console.ptr())->set_as_current();
+		}
+		else
+		{
+			BAN::RefPtr<TTY> tty;
+			DevFileSystem::get().for_each_inode([&](BAN::RefPtr<Inode> inode) -> BAN::Iteration {
+				if (!inode->is_tty())
+					return BAN::Iteration::Continue;
+				tty = static_cast<TTY*>(inode.ptr());
+				return BAN::Iteration::Break;
+			});
+
+			ASSERT(tty);
+
+			dwarnln("Could not find /dev/{}, falling back to /dev/{}", cmdline.console, tty->name());
+			tty->set_as_current();
+		}
+	}
+
 	VirtualFileSystem::initialize(cmdline.root);
 	dprintln("VFS initialized");
 
@@ -266,9 +295,9 @@ static void init2(void*)
 
 	Banos::initialize_initial_drivers();
 
-	auto console_path = MUST(BAN::String::formatted("/dev/{}", cmdline.console));
+	auto console_path = MUST(BAN::String::formatted("/dev/{}", TTY::current()->name()));
 	auto console_path_sv = console_path.sv();
-	MUST(Process::create_userspace({ 0, 0, 0, 0 }, "/usr/bin/init"_sv, BAN::Span<BAN::StringView>(&console_path_sv, 1)));
+	MUST(Process::create_userspace({ 0, 0, 0, 0 }, "/usr/bin/init"_sv, { &console_path_sv, 1 }));
 }
 
 extern "C" void ap_main()

@@ -3,6 +3,7 @@
 #include <kernel/ACPI/ACPI.h>
 #include <kernel/APIC.h>
 #include <kernel/Audio/Controller.h>
+#include <kernel/Graphics/BGA.h>
 #include <kernel/IDT.h>
 #include <kernel/IO.h>
 #include <kernel/Memory/PageTable.h>
@@ -258,6 +259,13 @@ namespace Kernel::PCI
 		for_each_device(
 			[&](PCI::Device& pci_device)
 			{
+				if (pci_device.vendor_id() == 0x1234 && pci_device.device_id() == 0x1111)
+				{
+					if (auto ret = BGAController::create(pci_device); ret.is_error())
+						dprintln("BGA: {}", ret.error());
+					return;
+				}
+
 				switch (pci_device.class_code())
 				{
 					case 0x01:

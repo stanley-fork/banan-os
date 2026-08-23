@@ -53,6 +53,8 @@ namespace Kernel
 
 		virtual bool master_has_closed() const { return false; }
 
+		virtual bool is_vtty() const { return false; }
+
 	protected:
 		TTY(termios termios, mode_t mode, uid_t uid, gid_t gid);
 

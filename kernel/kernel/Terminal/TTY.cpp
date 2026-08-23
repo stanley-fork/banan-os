@@ -82,7 +82,6 @@ namespace Kernel
 
 	BAN::RefPtr<TTY> TTY::current()
 	{
-		ASSERT(s_tty);
 		return s_tty;
 	}
 
