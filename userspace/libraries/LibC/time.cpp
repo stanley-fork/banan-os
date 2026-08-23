@@ -47,29 +47,24 @@ int clock_gettime(clockid_t clock_id, struct timespec* tp)
 		} while (seq1 != seq2 || (seq1 & 1));
 	};
 
-read_tsc_info:
 	if (g_shared_page->features & Kernel::API::SPF_RDTSCP)
 	{
-		uint32_t cpu;
-		curr_tsc = __builtin_ia32_rdtscp(&cpu);
-		read_tsc_info(g_shared_page->cpus[cpu].gettime_local);
+		do {
+			uint32_t cpu;
+			curr_tsc = __builtin_ia32_rdtscp(&cpu);
+			read_tsc_info(g_shared_page->cpus[cpu].gettime_local);
+		} while (curr_tsc < last_tsc);
 	}
-	else for (;;)
+	else
 	{
 		uint16_t cpu1, cpu2;
-		asm volatile("lsl %1, %0" : "=r"(cpu1) : "r"(g_shared_page->gdt_cpu_offset));
-		curr_tsc = __builtin_ia32_rdtsc();
-		asm volatile("lsl %1, %0" : "=r"(cpu2) : "r"(g_shared_page->gdt_cpu_offset));
-		if (cpu1 != cpu2)
-			continue;
-		read_tsc_info(g_shared_page->cpus[cpu1].gettime_local);
-		break;
+		do {
+			asm volatile("lsl %1, %0" : "=r"(cpu1) : "r"(g_shared_page->gdt_cpu_offset));
+			read_tsc_info(g_shared_page->cpus[cpu1].gettime_local);
+			curr_tsc = __builtin_ia32_rdtsc();
+			asm volatile("lsl %1, %0" : "=r"(cpu2) : "r"(g_shared_page->gdt_cpu_offset));
+		} while (cpu1 != cpu2);
 	}
-
-	// NOTE: as we read TSC before getting the calibration, it is possible
-	//       for the calibration to get updated in between.
-	if (curr_tsc < last_tsc)
-		goto read_tsc_info;
 
 	uint64_t clock_ns = curr_tsc - last_tsc;
 	if (shift >= 0)
