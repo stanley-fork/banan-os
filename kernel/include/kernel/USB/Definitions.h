@@ -30,6 +30,7 @@ namespace Kernel
 			Hub                        = 0x09,
 			BillboardDeviceClass       = 0x11,
 			DiagnosticDevice           = 0xDC,
+			WirelessController         = 0xE0,
 			Miscellaneous              = 0xEF,
 			VendorSpecific             = 0xFF,
 		};

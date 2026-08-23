@@ -134,6 +134,9 @@ namespace Kernel
 				case USB::DeviceBaseClass::DiagnosticDevice:
 					dprintln_if(DEBUG_USB, "Found DiagnosticDevice device");
 					return BAN::Error::from_errno(ENOTSUP);
+				case USB::DeviceBaseClass::WirelessController:
+					dprintln_if(DEBUG_USB, "Found WirelessController device");
+					return BAN::Error::from_errno(ENOTSUP);
 				case USB::DeviceBaseClass::Miscellaneous:
 					dprintln_if(DEBUG_USB, "Found Miscellaneous device");
 					return BAN::Error::from_errno(ENOTSUP);
