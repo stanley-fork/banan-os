@@ -26,3 +26,12 @@ build() {
 install() {
 	meson install --destdir="$DESTDIR" -C build || exit 1
 }
+
+post_install() {
+	mkdir -p "$DESTDIR/etc/init.d"
+	cat > "$DESTDIR/etc/init.d/gdk-pixbuf-update-loaders" << EOF
+#!/bin/Shell
+exec gdk-pixbuf-query-loaders --update-cache
+EOF
+	chmod +x "$DESTDIR/etc/init.d/gdk-pixbuf-update-loaders"
+}
