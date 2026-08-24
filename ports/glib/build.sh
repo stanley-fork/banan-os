@@ -25,3 +25,12 @@ build() {
 install() {
 	meson install --destdir="$DESTDIR" -C build || exit 1
 }
+
+post_install() {
+	mkdir -p "$DESTDIR/etc/init.d"
+	cat > "$DESTDIR/etc/init.d/glib-compile-schemas" << EOF
+#!/bin/Shell
+exec glib-compile-schemas /usr/share/glib-2.0/schemas
+EOF
+	chmod +x "$DESTDIR/etc/init.d/glib-compile-schemas"
+}
