@@ -1,12 +1,14 @@
 #!/bin/bash ../install.sh
 
 NAME='shared-mime-info'
-VERSION='2.4'
-DOWNLOAD_URL="https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/$VERSION/shared-mime-info-$VERSION.tar.gz#531291d0387eb94e16e775d7e73788d06d2b2fdd8cd2ac6b6b15287593b6a2de"
+VERSION='2.5.1'
+DOWNLOAD_URL="https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/$VERSION/shared-mime-info-$VERSION.tar.gz#ea248ea157b7fa0165f4fe282c84919fa84c3f175553642f229c8f1ab7539128"
 DEPENDENCIES=('glib' 'libxml2')
 CONFIGURE_OPTIONS=(
 	'-Dprefix=/usr'
 	'-Dbuildtype=release'
+	'-Dbuild-spec=false'
+	'-Dbuild-tools=false'
 	'-Dbuild-tests=false'
 	'-Dbuild-translations=false'
 	'-Dupdate-mimedb=true'
