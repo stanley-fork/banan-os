@@ -1,0 +1,12 @@
+diff -ruN AppStream-1.1.2/data/meson.build AppStream-1.1.2-banan_os/data/meson.build
+--- AppStream-1.1.2/data/meson.build	2026-01-28 22:15:58.000000000 +0200
++++ AppStream-1.1.2-banan_os/data/meson.build	2026-03-25 04:09:17.550968139 +0200
+@@ -9,8 +9,6 @@
+ 
+ # Do not rely on an exe wrapper for rel-info, use the system one in that case
+ if meson.is_cross_build()
+-    dependency('appstream', version: '>=' + as_version, native: true,
+-               not_found_message: 'Native appstream required for cross-building')
+     ascli_exe = find_program('appstreamcli', native: true)
+ endif
+ 
