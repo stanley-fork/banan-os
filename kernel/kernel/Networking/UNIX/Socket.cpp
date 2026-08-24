@@ -21,7 +21,7 @@ namespace Kernel
 
 	static BAN::ErrorOr<BAN::StringView> validate_sockaddr_un(const sockaddr* address, socklen_t address_len)
 	{
-		if (address_len < static_cast<socklen_t>(sizeof(sa_family_t)))
+		if (address_len <= static_cast<socklen_t>(sizeof(sa_family_t)))
 			return BAN::Error::from_errno(EINVAL);
 		if (address_len > static_cast<socklen_t>(sizeof(sockaddr_un)))
 			address_len = sizeof(sockaddr_un);
@@ -30,13 +30,12 @@ namespace Kernel
 		if (sockaddr_un.sun_family != AF_UNIX)
 			return BAN::Error::from_errno(EINVAL);
 
-		size_t length = 0;
-		while (length < sizeof(sockaddr_un::sun_path) && sockaddr_un.sun_path[length])
-			length++;
-		if (length >= sizeof(sockaddr_un::sun_path))
-			return BAN::Error::from_errno(ENAMETOOLONG);
-
-		return BAN::StringView { sockaddr_un.sun_path, length };
+		auto sun_path = BAN::StringView { sockaddr_un.sun_path, address_len - sizeof(sa_family_t) };
+		if (const auto null_idx = sun_path.find('\0'); null_idx.has_value())
+			sun_path = sun_path.substring(0, null_idx.value());
+		if (sun_path.empty())
+			return BAN::Error::from_errno(EINVAL);
+		return sun_path;
 	}
 
 	BAN::ErrorOr<BAN::RefPtr<UnixDomainSocket>> UnixDomainSocket::create(Socket::Type socket_type, const Socket::Info& info)
@@ -264,14 +263,15 @@ namespace Kernel
 	BAN::ErrorOr<void> UnixDomainSocket::bind_impl(const sockaddr* address, socklen_t address_len)
 	{
 		const auto sun_path = TRY(validate_sockaddr_un(address, address_len));
-		if (sun_path.empty())
-			return BAN::Error::from_errno(EINVAL);
+
+		BAN::String sun_path_nul;
+		TRY(sun_path_nul.append(sun_path));
 
 		// FIXME: This feels sketchy
 		auto parent_file = sun_path.front() == '/'
 			? TRY(Process::current().root_file().clone())
 			: TRY(Process::current().working_directory().clone());
-		if (auto ret = Process::current().create_file(AT_FDCWD, sun_path.data(), 0755 | Inode::Mode::IFSOCK); ret.is_error())
+		if (auto ret = Process::current().create_file(AT_FDCWD, sun_path_nul.data(), 0755 | Inode::Mode::IFSOCK); ret.is_error())
 		{
 			if (ret.error().get_error_code() == EEXIST)
 				return BAN::Error::from_errno(EADDRINUSE);
