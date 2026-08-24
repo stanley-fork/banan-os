@@ -9,7 +9,29 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/banan-os.h>
+#include <sys/random.h>
 #include <termios.h>
+
+static void generate_machine_id()
+{
+	int fd = open("/etc/machine-id", O_WRONLY | O_CREAT | O_EXCL, 0444);
+	if (fd == -1)
+		return;
+
+	uint8_t machine_id[16];
+	if (getrandom(machine_id, sizeof(machine_id), 0) < static_cast<ssize_t>(sizeof(machine_id)))
+	{
+		unlinkat(fd, nullptr, 0);
+		close(fd);
+		return;
+	}
+
+	for (size_t i = 0; i < sizeof(machine_id); i++)
+		dprintf(fd, "%02x", machine_id[i]);
+	dprintf(fd, "\n");
+
+	close(fd);
+}
 
 int main(int argc, char** argv)
 {
@@ -27,6 +49,8 @@ int main(int argc, char** argv)
 
 	if (load_keymap("/usr/share/keymaps/us.keymap") == -1)
 		perror("load_keymap");
+
+	generate_machine_id();
 
 	setenv("TERM", "ansi", 1);
 
