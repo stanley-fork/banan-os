@@ -191,7 +191,7 @@ int main(int argc, char** argv)
 
 			endpwent();
 
-			execl(shell_path, shell_path, nullptr);
+			execl(shell_path, shell_path, "--login", nullptr);
 			perror("execl");
 
 			exit(1);

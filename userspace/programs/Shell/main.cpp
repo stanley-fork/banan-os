@@ -3,6 +3,7 @@
 #include "Input.h"
 #include "TokenParser.h"
 
+#include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -26,6 +27,7 @@ int main(int argc, char** argv)
 
 		sa.sa_handler = SIG_IGN;
 		sigaction(SIGTTOU, &sa, nullptr);
+		sigaction(SIGTSTP, &sa, nullptr);
 	}
 
 	{
@@ -35,6 +37,8 @@ int main(int argc, char** argv)
 	}
 
 	Builtin::get().initialize();
+
+	bool is_login_shell = false;
 
 	for (int i = 1; i < argc; i++)
 	{
@@ -82,10 +86,16 @@ int main(int argc, char** argv)
 			printf("banan-sh 1.0\n");
 			return 0;
 		}
+		else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--login") == 0)
+		{
+			// TODO: actually store login name and fix getlogin()
+			is_login_shell = true;
+		}
 		else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
 		{
 			printf("usage: %s [options...]\n", argv[0]);
 			printf("  -c             run following argument as an argument\n");
+			printf("  -l, --login    spawn a login shell\n");
 			printf("  -v, --version  print version information and exit\n");
 			printf("  -h, --help     print this message and exit\n");
 			return 0;
@@ -104,6 +114,34 @@ int main(int argc, char** argv)
 			return input.get_input(prompt);
 		}
 	);
+
+	if (is_login_shell)
+	{
+		if (access("/etc/profile", R_OK) == 0)
+			if (auto ret = parser.execute().source_script("/etc/profile"); ret.is_error())
+				fprintf(stderr, "could not source /etc/profile: %s\n", ret.error().get_message());
+
+		DIR* dirp = opendir("/etc/profile.d");
+		if (dirp != nullptr)
+		{
+			struct dirent* dirent;
+			while ((dirent = readdir(dirp)))
+			{
+				if (dirent->d_type != DT_REG)
+					continue;
+
+				BAN::String path;
+				MUST(path.append("/etc/profile.d/"));
+				MUST(path.append(dirent->d_name));
+				if (access(path.data(), R_OK) == -1)
+					continue;
+
+				if (auto ret = parser.execute().source_script(path); ret.is_error())
+					fprintf(stderr, "could not source %s: %s\n", path.data(), ret.error().get_message());
+			}
+			closedir(dirp);
+		}
+	}
 
 	if (const char* home_env = getenv("HOME"))
 	{
