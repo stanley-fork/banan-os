@@ -1,0 +1,13 @@
+diff -ruN gimp-3.2.4/libgimp/gimpplugin.c gimp-3.2.4-banan_os/libgimp/gimpplugin.c
+--- gimp-3.2.4/libgimp/gimpplugin.c	2026-04-17 11:37:38.000000000 +0300
++++ gimp-3.2.4-banan_os/libgimp/gimpplugin.c	2026-08-24 21:47:23.319160010 +0300
+@@ -24,6 +24,9 @@
+ #include <errno.h>
+ #include <libintl.h>
+ #include <string.h>
++#ifdef __banan_os__
++#include <sys/select.h>
++#endif
+ 
+ #include "gimp.h"
+ 

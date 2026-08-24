@@ -1,0 +1,21 @@
+diff -ruN gimp-3.2.4/meson.build gimp-3.2.4-banan_os/meson.build
+--- gimp-3.2.4/meson.build	2026-04-17 11:37:38.000000000 +0300
++++ gimp-3.2.4-banan_os/meson.build	2026-08-24 21:47:23.319981280 +0300
+@@ -573,7 +573,7 @@
+   pangoft2     = dependency('pangoft2',    version: '>='+pango_minver)
+ endif
+ 
+-if cc.run('''
++if meson.can_run_host_binaries() and cc.run('''
+   #include <pango/pango.h>
+   #include <string.h>
+   #include <stdlib.h>
+@@ -1580,7 +1580,7 @@
+ endif
+ 
+ if shmem_choice == 'sysv'
+-  check_ip_rmid_deferred_release = cc.run('''
++  check_ip_rmid_deferred_release = host_os.contains('banan_os') or cc.run('''
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/shm.h>

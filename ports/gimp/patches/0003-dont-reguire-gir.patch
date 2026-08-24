@@ -1,0 +1,32 @@
+diff -ruN gimp-3.2.4/meson.build gimp-3.2.4-banan_os/meson.build
+--- gimp-3.2.4/meson.build	2026-04-17 11:37:38.000000000 +0300
++++ gimp-3.2.4-banan_os/meson.build	2026-08-24 21:47:23.319981280 +0300
+@@ -486,7 +486,7 @@
+ # minimum requirement.
+ add_project_arguments('-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_76', language: 'c')
+ 
+-gi                = dependency('gobject-introspection-1.0')
++gi                = dependency('gobject-introspection-1.0', required: false)
+ 
+ gobject           = dependency('gobject-2.0',        version: '>='+glib_minver)
+ gmodule           = dependency('gmodule-no-export-2.0')
+diff -ruN gimp-3.2.4/plug-ins/meson.build gimp-3.2.4-banan_os/plug-ins/meson.build
+--- gimp-3.2.4/plug-ins/meson.build	2026-04-17 11:37:38.000000000 +0300
++++ gimp-3.2.4-banan_os/plug-ins/meson.build	2026-08-24 21:47:23.320319594 +0300
+@@ -35,10 +35,15 @@
+   { 'name': 'pagecurl', },
+   { 'name': 'print', },
+   { 'name': 'screenshot', },
+-  { 'name': 'script-fu', },
+   { 'name': 'selection-to-path', }
+ ]
+ 
++if gi.found()
++  comples_plugins_list += {
++    'name': 'script-fu',
++  }
++endif
++
+ if openexr.found()
+   complex_plugins_list += {
+     'name': 'file-exr',
