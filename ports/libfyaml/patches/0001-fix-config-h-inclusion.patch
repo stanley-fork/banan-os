@@ -1,0 +1,39 @@
+diff -ruN libfyaml-0.9.6/CMakeLists.txt libfyaml-0.9.6-banan_os/CMakeLists.txt
+--- libfyaml-0.9.6/CMakeLists.txt	2026-03-15 15:48:50.000000000 +0200
++++ libfyaml-0.9.6-banan_os/CMakeLists.txt	2026-03-25 03:53:58.967967134 +0200
+@@ -1271,8 +1271,8 @@
+ endif()
+ 
+ add_executable(fy-tool ${FY_TOOL_SOURCES})
+-target_include_directories(fy-tool PRIVATE ${FY_TOOL_INCLUDE_DIRS})
+-target_compile_definitions(fy-tool PRIVATE ${COMMON_C_DEFINITIONS})
++target_include_directories(fy-tool PRIVATE ${FY_TOOL_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
++target_compile_definitions(fy-tool PRIVATE ${COMMON_C_DEFINITIONS} HAVE_CONFIG_H)
+ 
+ target_link_libraries(fy-tool PRIVATE fyaml)
+ 
+@@ -1340,9 +1340,10 @@
+     src/internal/fy-thread.c
+     ${GETOPT_SOURCES}
+ )
+-target_include_directories(fy-thread PRIVATE ${INTERNAL_TOOL_INCLUDES})
++target_include_directories(fy-thread PRIVATE ${INTERNAL_TOOL_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR})
+ target_compile_definitions(fy-thread PRIVATE
+     ${COMMON_C_DEFINITIONS}
++    HAVE_CONFIG_H
+     FY_STATIC)
+ if(NOT MSVC)
+     if(APPLE)
+@@ -1373,10 +1374,12 @@
+ )
+ target_include_directories(fy-b3sum PRIVATE
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/blake3
++    ${CMAKE_CURRENT_BINARY_DIR}
+     ${INTERNAL_TOOL_INCLUDES}
+ )
+ target_compile_definitions(fy-b3sum PRIVATE
+     ${COMMON_C_DEFINITIONS}
++    HAVE_CONFIG_H
+     FY_STATIC)
+ if(NOT MSVC)
+     if(APPLE)
