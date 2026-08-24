@@ -1,0 +1,13 @@
+diff -ruN glib-networking-2.80.1/meson.build glib-networking-2.80.1-banan_os/meson.build
+--- glib-networking-2.80.1/meson.build	2025-01-08 23:51:06.000000000 +0200
++++ glib-networking-2.80.1-banan_os/meson.build	2026-08-24 21:00:58.043148228 +0300
+@@ -63,8 +63,7 @@
+ gobject_dep = dependency('gobject-2.0')
+ gmodule_dep = dependency('gmodule-2.0')
+ 
+-gio_module_dir = gio_dep.get_variable('giomoduledir',
+-                                       pkgconfig_define: ['libdir', join_paths(prefix, libdir)])
++gio_module_dir = join_paths(prefix, libdir, 'gio', 'modules')
+ assert(gio_module_dir != '', 'GIO_MODULE_DIR is missing from gio-2.0.pc')
+ 
+ # *** Checks for LibProxy   ***
