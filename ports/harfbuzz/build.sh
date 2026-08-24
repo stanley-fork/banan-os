@@ -34,10 +34,15 @@ post_install() {
 
 	export HARFBUZZ_CIRCULAR=1
 
-	for circular in freetype cairo; do
-		pushd "$BANAN_PORT_DIR/$circular" >/dev/null || exit 1
+	pushd "$BANAN_PORT_DIR/freetype" >/dev/null || exit 1
+	rm -f .compile_hash
+	./build.sh || exit 1
+	popd >/dev/null
+
+	if grep -q cairo "$BANAN_PORT_DIR/.installed_ports"; then
+		pushd "$BANAN_PORT_DIR/cairo" >/dev/null || exit 1
 		rm -f .compile_hash
 		./build.sh || exit 1
 		popd >/dev/null
-	done
+	fi
 }
