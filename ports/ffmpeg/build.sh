@@ -12,11 +12,13 @@ CONFIGURE_OPTIONS=(
 	"--cxx=$CXX"
 	'--enable-cross-compile'
 	'--enable-shared'
+	'--disable-static'
+	'--disable-doc'
 	'--enable-gpl'
 	'--enable-version3'
 	'--enable-openssl'
 )
 
 configure() {
-	./configure "${CONFIGURE_OPTIONS[@]}"
+	./configure "${CONFIGURE_OPTIONS[@]}" || exit 1
 }
