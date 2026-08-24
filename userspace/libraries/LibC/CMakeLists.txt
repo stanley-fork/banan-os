@@ -49,6 +49,7 @@ set(LIBC_SOURCES
 	sys/futex.cpp
 	sys/ioctl.cpp
 	sys/mman.cpp
+	sys/random.cpp
 	sys/resource.cpp
 	sys/select.cpp
 	sys/shm.cpp
