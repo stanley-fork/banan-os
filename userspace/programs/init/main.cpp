@@ -2,6 +2,7 @@
 #include <BAN/Optional.h>
 #include <BAN/Vector.h>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
@@ -33,6 +34,46 @@ static void generate_machine_id()
 	close(fd);
 }
 
+static void run_init_scripts()
+{
+	DIR* dirp = opendir("/etc/init.d");
+	if (dirp == nullptr)
+		return;
+
+	dirent* dirent;
+	while ((dirent = readdir(dirp)))
+	{
+		if (dirent->d_type != DT_REG)
+			continue;
+
+		char script_path[PATH_MAX];
+		sprintf(script_path, "/etc/init.d/%s", dirent->d_name);
+
+		const pid_t pid = fork();
+		if (pid == -1)
+			continue;
+
+		if (pid == 0)
+		{
+			execl(script_path, script_path, nullptr);
+			exit(1);
+		}
+
+		int status;
+		while (waitpid(pid, &status, 0) == -1 && errno == EINTR)
+			continue;
+
+		if (WIFSIGNALED(status))
+			dwarnln("'{}' was killed by signal {}", script_path, strsignal(WTERMSIG(status)));
+		else if (const int exit_code = WEXITSTATUS(status))
+			dwarnln("'{}' exited with {}", script_path, exit_code);
+		else
+			dprintln("'{}' succeeded", script_path);
+	}
+
+	closedir(dirp);
+}
+
 int main(int argc, char** argv)
 {
 	ASSERT(argc == 2);
@@ -50,9 +91,12 @@ int main(int argc, char** argv)
 	if (load_keymap("/usr/share/keymaps/us.keymap") == -1)
 		perror("load_keymap");
 
-	generate_machine_id();
-
 	setenv("TERM", "ansi", 1);
+	setenv("PATH", "/bin:/usr/bin", 1);
+
+	generate_machine_id();
+	run_init_scripts();
+
 
 	if (fork() == 0)
 	{
@@ -137,8 +181,6 @@ int main(int argc, char** argv)
 				perror("setgid");
 			if (setuid(pwd->pw_uid) == -1)
 				perror("setuid");
-
-			setenv("PATH", "/bin:/usr/bin", 0);
 
 			setenv("HOME", pwd->pw_dir, 1);
 			chdir(pwd->pw_dir);
