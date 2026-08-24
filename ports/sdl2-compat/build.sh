@@ -20,5 +20,5 @@ build() {
 
 install() {
 	DESTDIR="$DESTDIR" cmake --install build || exit 1
-	ln -s sdl2-compat.pc "$DESTDIR"/usr/lib/pkgconfig/sdl2.pc || exit 1
+	ln -sf sdl2-compat.pc "$DESTDIR"/usr/lib/pkgconfig/sdl2.pc || exit 1
 }
