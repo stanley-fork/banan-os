@@ -54,6 +54,8 @@ MAKE_INSTALL_TARGETS=('install')
 
 CONFIG_SUB=()
 
+REVISION=1
+
 clean() {
 	find . -mindepth 1 -maxdepth 1 -not -name 'patches' -not -name 'build.sh' -exec rm -rf {} +
 }
@@ -111,11 +113,15 @@ post_install() {
 
 install() {
 	for target in "${MAKE_INSTALL_TARGETS[@]}"; do
-		make $target "DESTDIR=$BANAN_SYSROOT" || exit 1
+		make $target "DESTDIR=$DESTDIR" || exit 1
 	done
 }
 
 source $1
+
+if [ -z $DESCRIPTION ]; then
+	DESCRIPTION="TODO description for $NAME"
+fi
 
 if [ -z $NAME ] || [ -z $VERSION ] || [ -z $DOWNLOAD_URL ]; then
 	echo  "Port does not set needed environment variables" >&2
@@ -255,6 +261,33 @@ fi
 DESTDIR="$BANAN_SYSROOT"
 pre_install
 install
-grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
 post_install
 find "$BANAN_SYSROOT/usr/lib" -name '*.la' -delete
+grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
+
+if (( $PACKAGE )); then
+	PACKAGE_DIR="$BANAN_PORT_DIR/package"
+
+	version="$VERSION"
+	if [[ "$version" = 'git' ]]; then
+		version=0.0
+	fi
+
+	package_dir="${PACKAGE_DIR}/${NAME}-${version}_${REVISION}-${BANAN_ARCH}"
+	mkdir "$package_dir" &>/dev/null || exit 0
+
+	dependencies=''
+	for dep in "${DEPENDENCIES[@]}"; do
+		dependencies+="$dep>=0 "
+	done
+	echo $dependencies > "$package_dir.deps"
+
+	DESTDIR="$package_dir"
+	pre_install
+	install
+	post_install
+
+	mkdir -p "$PACKAGE_DIR/repo"
+	cd "$PACKAGE_DIR/repo"
+	xbps-create -A $BANAN_ARCH -n "$NAME-${version}_$REVISION" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
+fi
