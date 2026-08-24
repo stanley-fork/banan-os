@@ -17,6 +17,6 @@ CONFIGURE_OPTIONS=(
 )
 
 post_install() {
-	shellrc="$BANAN_SYSROOT/home/user/.shellrc"
-	grep -q 'export EDITOR=' "$shellrc" || echo 'export EDITOR=vim' >> "$shellrc"
+	mkdir -p "$DESTDIR/etc/profile.d"
+	echo 'export EDITOR=vim' > "$DESTDIR/etc/profile.d/vim.sh"
 }

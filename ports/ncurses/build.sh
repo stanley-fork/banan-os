@@ -23,6 +23,6 @@ post_install() {
 
 	ln -sv libncursesw.so "$DESTDIR/usr/lib/libncurses.so"
 
-	shellrc="$BANAN_SYSROOT/home/user/.shellrc"
-	grep -q 'export NCURSES_NO_UTF8_ACS=' "$shellrc" || echo 'export NCURSES_NO_UTF8_ACS=1' >> "$shellrc"
+	mkdir -p "$DESTDIR/etc/profile.d"
+	echo 'export NCURSES_NO_UTF8_ACS=1' > "$DESTDIR/etc/profile.d/ncurses.sh"
 }

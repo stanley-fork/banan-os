@@ -28,6 +28,6 @@ install() {
 }
 
 post_install() {
-	shellrc="$BANAN_SYSROOT/home/user/.shellrc"
-	grep -q 'export DISPLAY=' "$shellrc" || echo 'export DISPLAY=:69' >> "$shellrc"
+	mkdir -p "$DESTDIR/etc/profile.d"
+	echo 'export DISPLAY=:69' > "$DESTDIR/etc/profile.d/xbanan.sh"
 }
