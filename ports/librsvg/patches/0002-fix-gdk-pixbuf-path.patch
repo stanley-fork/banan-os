@@ -1,0 +1,13 @@
+diff -ruN librsvg-2.40.21/configure librsvg-2.40.21-banan_os/configure
+--- librsvg-2.40.21/configure	2020-02-26 19:45:16.000000000 +0200
++++ librsvg-2.40.21-banan_os/configure	2026-08-24 19:52:43.388200018 +0300
+@@ -14745,6 +14745,9 @@
+   gdk_pixbuf_binarydir="`$PKG_CONFIG --variable=gdk_pixbuf_binarydir gdk-pixbuf-2.0`"
+   gdk_pixbuf_moduledir=`$PKG_CONFIG --variable gdk_pixbuf_moduledir gdk-pixbuf-2.0`
+   gdk_pixbuf_cache_file=`$PKG_CONFIG --variable gdk_pixbuf_cache_file gdk-pixbuf-2.0`
++  gdk_pixbuf_binarydir="${gdk_pixbuf_binarydir#$PKG_CONFIG_SYSROOT_DIR}"
++  gdk_pixbuf_moduledir="${gdk_pixbuf_moduledir#$PKG_CONFIG_SYSROOT_DIR}"
++  gdk_pixbuf_cache_file="${gdk_pixbuf_cache_file#$PKG_CONFIG_SYSROOT_DIR}"
+ fi
+ 
+ 

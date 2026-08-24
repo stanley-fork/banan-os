@@ -1,0 +1,24 @@
+diff -ruN librsvg-2.40.21/rsvg-css.c librsvg-2.40.21-banan_os/rsvg-css.c
+--- librsvg-2.40.21/rsvg-css.c	2018-10-02 01:50:22.000000000 +0300
++++ librsvg-2.40.21-banan_os/rsvg-css.c	2026-08-24 18:45:05.745087552 +0300
+@@ -839,7 +839,7 @@
+ }
+ 
+ static void
+-rsvg_xml_noerror (void *data, xmlErrorPtr error)
++rsvg_xml_noerror (void *data, const xmlError* error)
+ {
+ }
+ 
+diff -ruN librsvg-2.40.21/rsvg-private.h librsvg-2.40.21-banan_os/rsvg-private.h
+--- librsvg-2.40.21/rsvg-private.h	2020-02-26 19:40:25.000000000 +0200
++++ librsvg-2.40.21-banan_os/rsvg-private.h	2026-08-24 18:45:12.583727389 +0300
+@@ -31,7 +31,7 @@
+ 
+ #include "rsvg.h"
+ 
+-#include <libxml/SAX.h>
++#include <libxml/tree.h>
+ #include <libxml/xmlmemory.h>
+ #include <pango/pango.h>
+ #include <glib.h>
