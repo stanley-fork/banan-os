@@ -21,6 +21,10 @@ MESON_VERSION="meson-1.10.0"
 MESON_TAR="$MESON_VERSION.tar.gz"
 MESON_URL="https://github.com/mesonbuild/meson/releases/download/1.10.0/$MESON_TAR"
 
+XBPS_VERSION="0.60.7"
+XBPS_TAR="$XBPS_VERSION.tar.gz"
+XBPS_URL="https://github.com/void-linux/xbps/archive/refs/tags/$XBPS_TAR"
+
 if [[ -z $BANAN_SYSROOT ]]; then
 	echo "You must set the BANAN_SYSROOT environment variable" >&2
 	exit 1
@@ -230,6 +234,30 @@ build_meson() {
 	./packaging/create_zipapp.py --outfile "$BANAN_TOOLCHAIN_PREFIX/bin/meson" --interpreter '/usr/bin/env python3'
 }
 
+build_xbps() {
+	cd "$BANAN_BUILD_DIR/toolchain"
+
+	if [ ! -d "xbps-$XBPS_VERSION" ]; then
+		if [ ! -f "$XBPS_TAR" ]; then
+			echo "Downloading xbps-$XBPS_TAR"
+			wget "$XBPS_URL"
+		fi
+		echo "Unpacking ${XBPS_TAR}"
+		tar xvf "$XBPS_TAR"
+	fi
+
+	cd "xbps-$XBPS_VERSION"
+
+	echo "Building xbps-$XBPS_VERSION"
+
+	CFLAGS=-Wno-discarded-qualifiers \
+	./configure \
+		--prefix="$BANAN_TOOLCHAIN_PREFIX" \
+		--dbdir="$BANAN_TOOLCHAIN_PREFIX/db"
+	make $MAKE_JOBS
+	make install
+}
+
 BUILD_BINUTILS=1
 if [[ -f $BANAN_TOOLCHAIN_PREFIX/bin/$BANAN_TOOLCHAIN_TRIPLE-ld ]]; then
 	echo "You already seem to have a binutils installed."
@@ -283,6 +311,15 @@ if [[ -f $BANAN_TOOLCHAIN_PREFIX/bin/meson ]]; then
 	fi
 fi
 
+BUILD_XBPS=1
+if [[ -f $BANAN_TOOLCHAIN_PREFIX/bin/xbps-install ]]; then
+	echo "You already seem to have a xbps installed."
+	read -e -p "Do you want to rebuild it [y/N]? " choice
+	if ! [[ "$choice" == [Yy]* ]]; then
+		BUILD_XBPS=0
+	fi
+fi
+
 # delete everything but toolchain
 mkdir -p $BANAN_BUILD_DIR
 find $BANAN_BUILD_DIR -mindepth 1 -maxdepth 1 ! -name toolchain -exec rm -r {} +
@@ -312,6 +349,10 @@ fi
 
 if (($BUILD_MESON)); then
 	build_meson
+fi
+
+if (($BUILD_XBPS)); then
+	build_xbps
 fi
 
 if (($BUILD_LIBSTDCPP)); then

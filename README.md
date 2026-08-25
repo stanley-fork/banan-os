@@ -9,7 +9,7 @@ This is my hobby operating system written in C++. Currently supports x86\_64 and
 
 You can find a live demo [here](https://bananymous.com/banan-os)
 
-If you want to try out DOOM, you should first enter the GUI environment using the `start-gui` command. Then you can run `doom` in the GUI terminal.
+![screenshot from qemu running banan-os](assets/banan-os.png)
 
 ### Features
 
@@ -18,6 +18,8 @@ If you want to try out DOOM, you should first enter the GUI environment using th
 - [x] SMP (multiprocessing)
 - [x] Linear framebuffer (VESA and GOP)
 - [x] Network stack
+- [x] USB stack
+- [x] Audio support
 - [x] ELF executable loading
 - [x] AML interpreter (partial)
 - [x] Basic graphical environment
@@ -27,16 +29,14 @@ If you want to try out DOOM, you should first enter the GUI environment using th
   - [ ] Some nice apps
 - [x] ELF dynamic linking
 - [x] copy-on-write memory
-  - [x] file mappings
-  - [ ] anonymous mappings
 
 #### Drivers
 - [x] NVMe disks
 - [x] ATA (IDE, SATA) disks
 - [x] E1000 and E1000E NICs
 - [x] RTL8111/8168/8211/8411 NICs
-- [x] PS2 keyboard (all scancode sets)
-- [x] PS2 mouse
+- [x] AC97 and iHDA audio cards
+- [x] PS2 keyboard and mouse
 - [x] USB
   - [x] xHCI
   - [ ] EHCI
@@ -46,7 +46,8 @@ If you want to try out DOOM, you should first enter the GUI environment using th
   - [x] Mouse
   - [x] Mass storage
   - [x] Hubs
-  - [ ] ...
+  - [ ] Network
+  - [ ] Audio
 - [ ] virtio devices (network, storage)
 
 #### Network
@@ -54,7 +55,7 @@ If you want to try out DOOM, you should first enter the GUI environment using th
 - [x] ICMP
 - [x] IPv4
 - [x] UDP
-- [x] TCP (partial and buggy)
+- [x] TCP
 - [x] Unix domain sockets
 - [ ] SSL
 
@@ -65,15 +66,12 @@ If you want to try out DOOM, you should first enter the GUI environment using th
 - [x] Dev
 - [x] Ram
 - [x] Proc
-- [ ] Sys
 - [ ] 9P
 
 #### Bootloader support
 - [x] GRUB
 - [x] Custom BIOS bootloader
 - [ ] Custom UEFI bootloader
-
-![screenshot from qemu running banan-os](assets/banan-os.png)
 
 ## Code structure
 
@@ -125,7 +123,21 @@ If you have corrupted your disk image or want to create new one, you can either 
 ./bos image-full
 ```
 
+To test on real hardware, I have a script to generate a compressed ISO. The ISO can be copied directly to an USB drive with for example `dd`. The file is created at build/banan-os.iso and can be generated with
+```sh
+./bos iso
+```
+
 I have also created shell completion script for zsh. You can either copy the file in _script/shell-completion/zsh/\_bos_ to _/usr/share/zsh/site-functions/_ or add the _script/shell-completion/zsh_ to your fpath in _.zshrc_.
+
+### Package Manager
+
+banan-os uses xbps as its package manager for ports. All upstream ports are packaged into xbps packages hosted on a [repository on my server](https://packages.bananymous.com/banan-os). You can manage sysroot's xbps packages with `./bos` wrapper. You can use `xbps-install`, `xbps-remove` and `xbps-query` with repository and sysroot set to the correct values. For example to install xbps that can be used inside banan-os you can use
+```sh
+./bos xbps-install -S xbps
+```
+For xbps usage see [their documentation](https://docs.voidlinux.org/xbps/index.html).
+
 
 ## Contributing
 

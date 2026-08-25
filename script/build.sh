@@ -35,7 +35,7 @@ build_target () {
 		echo "No target provided"
 		exit 1
 	fi
-	run_fakeroot $BANAN_CMAKE --build $BANAN_BUILD_DIR -- -j$(nproc) $1
+	run_fakeroot $BANAN_CMAKE --build $BANAN_BUILD_DIR -- -j$(nproc) "$1"
 }
 
 build_toolchain () {
@@ -137,6 +137,29 @@ case $1 in
 	distclean)
 		rm -rf $BANAN_BUILD_DIR
 		find $BANAN_ROOT_DIR/ports -name '.compile_hash' -exec rm {} +
+		;;
+	xbps-*)
+		command="$1"
+		shift
+
+		build_target all
+		build_target install
+
+		xbps_args=()
+
+		case "$command" in
+			xbps-install|xbps-remove|xbps-query)
+				xbps_args+=(--rootdir "$BANAN_SYSROOT")
+				;;
+		esac
+
+		case "$command" in
+			xbps-install|xbps-query)
+				xbps_args+=(--repository "$BANAN_XBPS_REPO")
+				;;
+		esac
+
+		run_xbps "$command" "${xbps_args[@]}" "$@"
 		;;
 	*)
 		build_target $1

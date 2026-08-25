@@ -301,6 +301,6 @@ if (( $PACKAGE )); then
 
 	mkdir -p "$PACKAGE_REPO"
 	cd "$PACKAGE_REPO"
-	xbps-create -A "$BANAN_ARCH" -n "${version_string%.*}" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
-	xbps-rindex -af "$version_string.xbps"
+	run_xbps xbps-create -A "$BANAN_ARCH" -n "${version_string%.*}" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
+	run_xbps xbps-rindex -af "$version_string.xbps"
 fi
