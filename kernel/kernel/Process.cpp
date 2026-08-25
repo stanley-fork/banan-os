@@ -1262,18 +1262,12 @@ namespace Kernel
 				return BAN::Error::from_errno(EINVAL);
 		}
 
-		MemoryRegion* value_region = nullptr;
-		MemoryRegion* ovalue_region = nullptr;
-		BAN::ScopeGuard _([&] {
-			if (value_region)
-				value_region->unpin();
-			if (ovalue_region)
-				ovalue_region->unpin();
-		});
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
 
-		value_region = TRY(validate_and_pin_pointer_access(value, sizeof(itimerval), false));
+		TRY(validate_and_pin_pointer_access(value, sizeof(itimerval), false, regions));
 		if (ovalue != nullptr)
-			ovalue_region = TRY(validate_and_pin_pointer_access(ovalue, sizeof(itimerval), true));
+			TRY(validate_and_pin_pointer_access(ovalue, sizeof(itimerval), true, regions));
 
 		{
 			SpinLockGuard _(s_process_lock);
@@ -1467,8 +1461,10 @@ namespace Kernel
 			return 0;
 		}
 
-		auto* buffer_region = TRY(validate_and_pin_pointer_access(buffer, count, true));
-		BAN::ScopeGuard _([buffer_region] { buffer_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(buffer, count, true, regions));
+
 		return TRY(m_open_file_descriptors.read(fd, BAN::ByteSpan(static_cast<uint8_t*>(buffer), count)));
 	}
 
@@ -1480,8 +1476,10 @@ namespace Kernel
 			return 0;
 		}
 
-		auto* buffer_region = TRY(validate_and_pin_pointer_access(buffer, count, false));
-		BAN::ScopeGuard _([buffer_region] { buffer_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(buffer, count, false, regions));
+
 		return TRY(m_open_file_descriptors.write(fd, BAN::ConstByteSpan(static_cast<const uint8_t*>(buffer), count)));
 	}
 
@@ -1671,8 +1669,9 @@ namespace Kernel
 	{
 		auto inode = TRY(m_open_file_descriptors.inode_of(fd));
 
-		auto* buffer_region = TRY(validate_and_pin_pointer_access(buffer, count, true));
-		BAN::ScopeGuard _([buffer_region] { buffer_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(buffer, count, true, regions));
 
 		return TRY(inode->read(offset, { reinterpret_cast<uint8_t*>(buffer), count }));
 	}
@@ -1681,8 +1680,9 @@ namespace Kernel
 	{
 		auto inode = TRY(m_open_file_descriptors.inode_of(fd));
 
-		auto* buffer_region = TRY(validate_and_pin_pointer_access(buffer, count, false));
-		BAN::ScopeGuard _([buffer_region] { buffer_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(buffer, count, false, regions));
 
 		return TRY(inode->write(offset, { reinterpret_cast<const uint8_t*>(buffer), count }));	}
 
@@ -1702,10 +1702,7 @@ namespace Kernel
 		{
 			LockGuard _(m_process_lock);
 			if (!m_credentials.is_superuser() && inode->uid() != m_credentials.euid())
-			{
-				dwarnln("cannot chmod uid {} vs {}", inode->uid(), m_credentials.euid());
 				return BAN::Error::from_errno(EPERM);
-			}
 		}
 
 		TRY(inode->chmod(mode & ~S_IFMASK));
@@ -1877,8 +1874,9 @@ namespace Kernel
 		if (!inode->mode().ifsock())
 			return BAN::Error::from_errno(ENOTSOCK);
 
-		auto* buffer = TRY(validate_and_pin_pointer_access(user_option_value, option_len, true));
-		BAN::ScopeGuard _([buffer] { buffer->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(user_option_value, option_len, true, regions));
 
 		TRY(inode->getsockopt(level, option_name, user_option_value, &option_len));
 		TRY(write_to_user(user_option_len, &option_len, sizeof(socklen_t)));
@@ -1895,8 +1893,9 @@ namespace Kernel
 		if (!inode->mode().ifsock())
 			return BAN::Error::from_errno(ENOTSOCK);
 
-		auto* buffer = TRY(validate_and_pin_pointer_access(user_option_value, option_len, false));
-		BAN::ScopeGuard _([buffer] { buffer->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(user_option_value, option_len, false, regions));
 
 		TRY(inode->setsockopt(level, option_name, user_option_value, option_len));
 
@@ -1910,20 +1909,13 @@ namespace Kernel
 		if (flags & ~(SOCK_NONBLOCK | SOCK_CLOEXEC))
 			return BAN::Error::from_errno(EINVAL);
 
-		MemoryRegion* address_region1 = nullptr;
-		MemoryRegion* address_region2 = nullptr;
-
-		BAN::ScopeGuard _([&] {
-			if (address_region1)
-				address_region1->unpin();
-			if (address_region2)
-				address_region2->unpin();
-		});
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
 
 		if (address_len)
 		{
-			address_region1 = TRY(validate_and_pin_pointer_access(address_len, sizeof(address_len), true));
-			address_region2 = TRY(validate_and_pin_pointer_access(address, *address_len, true));
+			TRY(validate_and_pin_pointer_access(address_len, sizeof(address_len), true, regions));
+			TRY(validate_and_pin_pointer_access(address,           *address_len,  true, regions));
 		}
 
 		auto inode = TRY(m_open_file_descriptors.inode_of(socket));
@@ -1990,23 +1982,17 @@ namespace Kernel
 		TRY(read_from_user(user_message, &message, sizeof(msghdr)));
 
 		BAN::Vector<MemoryRegion*> regions;
-		TRY(regions.reserve(!!message.msg_name + !!message.msg_control + !!message.msg_iov));
-
-		BAN::ScopeGuard _([&regions] {
-			for (auto* region : regions)
-				region->unpin();
-		});
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
 
 		if (message.msg_name)
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_name, message.msg_namelen, true))));
+			TRY(validate_and_pin_pointer_access(message.msg_name, message.msg_namelen, true, regions));
 		if (message.msg_control)
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_control, message.msg_controllen, true))));
+			TRY(validate_and_pin_pointer_access(message.msg_control, message.msg_controllen, true, regions));
 		if (message.msg_iov)
 		{
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), true))));
-			TRY(regions.reserve(regions.size() + message.msg_iovlen));
+			TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), true, regions));
 			for (int i = 0; i < message.msg_iovlen; i++)
-				TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, true))));
+				TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, true, regions));
 		}
 
 		const auto ret = TRY(m_open_file_descriptors.recvmsg(socket, message, flags));
@@ -2022,23 +2008,18 @@ namespace Kernel
 		TRY(read_from_user(user_message, &message, sizeof(msghdr)));
 
 		BAN::Vector<MemoryRegion*> regions;
-		TRY(regions.reserve(!!message.msg_name + !!message.msg_control + !!message.msg_iov));
-
-		BAN::ScopeGuard _([&regions] {
-			for (auto* region : regions)
-				region->unpin();
-		});
+		BAN::ScopeGuard _([&regions] { for (auto* region : regions) region->unpin(); });
 
 		if (message.msg_name)
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_name, message.msg_namelen, false))));
+			TRY(validate_and_pin_pointer_access(message.msg_name, message.msg_namelen, false, regions));
 		if (message.msg_control)
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_control, message.msg_controllen, false))));
+			TRY(validate_and_pin_pointer_access(message.msg_control, message.msg_controllen, false, regions));
 		if (message.msg_iov)
 		{
-			TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), false))));
+			TRY(validate_and_pin_pointer_access(message.msg_iov, message.msg_iovlen * sizeof(iovec), false, regions));
 			TRY(regions.reserve(regions.size() + message.msg_iovlen));
 			for (int i = 0; i < message.msg_iovlen; i++)
-				TRY(regions.push_back(TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, false))));
+				TRY(validate_and_pin_pointer_access(message.msg_iov[i].iov_base, message.msg_iov[i].iov_len, false, regions));
 		}
 
 		return TRY(m_open_file_descriptors.sendmsg(socket, message, flags));
@@ -2173,8 +2154,9 @@ namespace Kernel
 
 	BAN::ErrorOr<long> Process::sys_ppoll(pollfd* fds, nfds_t nfds, const timespec* user_timeout, const sigset_t* user_sigmask)
 	{
-		auto* fds_region = TRY(validate_and_pin_pointer_access(fds, nfds * sizeof(pollfd), true));
-		BAN::ScopeGuard _([fds_region] { fds_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(fds, nfds * sizeof(pollfd), true, regions));
 
 		const auto old_sigmask = Thread::current().m_signal_block_mask;
 		if (user_sigmask != nullptr)
@@ -2356,8 +2338,9 @@ namespace Kernel
 				timeout.tv_nsec;
 		}
 
-		auto* events_region = TRY(validate_and_pin_pointer_access(events, maxevents * sizeof(epoll_event), true));
-		BAN::ScopeGuard _([events_region] { events_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(events, maxevents * sizeof(epoll_event), true, regions));
 
 		const auto old_sigmask = Thread::current().m_signal_block_mask;
 		if (user_sigmask)
@@ -2570,8 +2553,10 @@ namespace Kernel
 		if (BAN::Math::will_multiplication_overflow(list_len, sizeof(struct dirent)))
 			return BAN::Error::from_errno(EOVERFLOW);
 
-		auto* list_region = TRY(validate_and_pin_pointer_access(list, list_len * sizeof(struct dirent), true));
-		BAN::ScopeGuard _([list_region] { list_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(list, list_len * sizeof(struct dirent), true, regions));
+
 		return TRY(m_open_file_descriptors.read_dir_entries(fd, list, list_len));
 	}
 
@@ -3408,8 +3393,9 @@ namespace Kernel
 		const bool is_private = (op & FUTEX_PRIVATE);
 		op &= ~(FUTEX_PRIVATE | FUTEX_REALTIME);
 
-		auto* buffer_region = TRY(validate_and_pin_pointer_access(addr, sizeof(uint32_t), false));
-		BAN::ScopeGuard pin_guard([buffer_region] { buffer_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _0([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(addr, sizeof(uint32_t), false, regions));
 
 		const paddr_t paddr = m_page_table->physical_address_of(vaddr & PAGE_ADDR_MASK) | (vaddr & ~PAGE_ADDR_MASK);
 		ASSERT(paddr != 0);
@@ -3470,7 +3456,7 @@ namespace Kernel
 			}
 		}
 
-		LockGuard _(futex->mutex);
+		LockGuard _1(futex->mutex);
 
 		switch (op)
 		{
@@ -3553,8 +3539,9 @@ namespace Kernel
 		if (stack_vaddr % PAGE_SIZE || stack_size % PAGE_SIZE)
 			return BAN::Error::from_errno(EINVAL);
 
-		auto* memory_region = TRY(validate_and_pin_pointer_access(stack_base, stack_size, true));
-		BAN::ScopeGuard _0([memory_region] { if (memory_region) memory_region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _0([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(stack_base, stack_size, true, regions));
 
 		const vaddr_t initial_stack_pointer = stack_vaddr + stack_size - sizeof(void*);
 		*reinterpret_cast<void**>(initial_stack_pointer) = arg;
@@ -4022,13 +4009,14 @@ namespace Kernel
 		if (BAN::Math::will_multiplication_overflow(count, sizeof(gid_t)))
 			return BAN::Error::from_errno(EOVERFLOW);
 
-		LockGuard _(m_process_lock);
+		LockGuard _0(m_process_lock);
 
 		if (!m_credentials.is_superuser())
 			return BAN::Error::from_errno(EPERM);
 
-		auto* region = TRY(validate_and_pin_pointer_access(groups, count * sizeof(gid_t), false));
-		BAN::ScopeGuard pin_guard([region] { region->unpin(); });
+		BAN::Vector<MemoryRegion*> regions;
+		BAN::ScopeGuard _1([&] { for (auto* region : regions) region->unpin(); });
+		TRY(validate_and_pin_pointer_access(groups, count * sizeof(gid_t), false, regions));
 
 		TRY(m_credentials.set_groups({ groups, count }));
 
@@ -4093,26 +4081,23 @@ namespace Kernel
 		return region->allocate_page_containing(address, wants_write);
 	}
 
-	BAN::ErrorOr<MemoryRegion*> Process::validate_and_pin_pointer_access(const void* ptr, size_t size, bool needs_write)
+	BAN::ErrorOr<void> Process::validate_and_pin_pointer_access(const void* ptr, size_t size, bool needs_write, BAN::Vector<MemoryRegion*>& regions)
 	{
-		// TODO: allow pinning multiple regions?
-
-		const vaddr_t user_vaddr = reinterpret_cast<vaddr_t>(ptr);
+		vaddr_t vaddr = reinterpret_cast<vaddr_t>(ptr);
 
 		{
 			RWLockRDGuard _(m_memory_region_lock);
 
-			const size_t first_index = find_mapped_region(user_vaddr);
+			const size_t first_index = find_mapped_region(vaddr);
 			for (size_t i = first_index; i < m_mapped_regions.size(); i++)
 			{
-				auto& region = m_mapped_regions[i];
-				if (user_vaddr >= region->vaddr() + region->size())
+				const auto& region = m_mapped_regions[i];
+				if (vaddr < region->vaddr())
 					break;
-				if (!region->contains_fully(user_vaddr, size))
-					continue;
 
-				const size_t page_count = range_page_count(user_vaddr, size);
-				const vaddr_t page_base = user_vaddr & PAGE_ADDR_MASK;
+				const vaddr_t min_vaddr_end = BAN::Math::min(vaddr + size, region->vaddr() + region->size());
+				const size_t page_count = range_page_count(vaddr, min_vaddr_end - vaddr);
+				const vaddr_t page_base = vaddr & PAGE_ADDR_MASK;
 				for (size_t p = 0; p < page_count; p++)
 				{
 					const auto flags = PageTable::UserSupervisor | (needs_write ? PageTable::ReadWrite : 0) | PageTable::Present;
@@ -4120,8 +4105,15 @@ namespace Kernel
 						goto validate_and_pin_pointer_access_with_allocation;
 				}
 
+				TRY(regions.push_back(region.ptr()));
 				region->pin();
-				return region.ptr();
+
+				if (region->contains(vaddr + size - 1))
+					return {};
+
+				const vaddr_t next_vaddr = region->vaddr() + region->size();
+				size -= next_vaddr - vaddr;
+				vaddr = next_vaddr;
 			}
 
 			return BAN::Error::from_errno(EFAULT);
@@ -4130,17 +4122,16 @@ namespace Kernel
 	validate_and_pin_pointer_access_with_allocation:
 		RWLockWRGuard _(m_memory_region_lock);
 
-		const size_t first_index = find_mapped_region(user_vaddr);
+		const size_t first_index = find_mapped_region(vaddr);
 		for (size_t i = first_index; i < m_mapped_regions.size(); i++)
 		{
 			auto& region = m_mapped_regions[i];
-			if (user_vaddr >= region->vaddr() + region->size())
+			if (vaddr < region->vaddr())
 				break;
-			if (!region->contains_fully(user_vaddr, size))
-				continue;
 
-			const size_t page_count = range_page_count(user_vaddr, size);
-			const vaddr_t page_base = user_vaddr & PAGE_ADDR_MASK;
+			const vaddr_t min_vaddr_end = BAN::Math::min(vaddr + size, region->vaddr() + region->size());
+			const size_t page_count = range_page_count(vaddr, min_vaddr_end - vaddr);
+			const vaddr_t page_base = vaddr & PAGE_ADDR_MASK;
 			for (size_t p = 0; p < page_count; p++)
 			{
 				const auto flags = PageTable::UserSupervisor | (needs_write ? PageTable::ReadWrite : 0) | PageTable::Present;
@@ -4150,8 +4141,15 @@ namespace Kernel
 					return BAN::Error::from_errno(EFAULT);
 			}
 
+			TRY(regions.push_back(region.ptr()));
 			region->pin();
-			return region.ptr();
+
+			if (region->contains(vaddr + size - 1))
+				return {};
+
+			const vaddr_t next_vaddr = region->vaddr() + region->size();
+			size -= next_vaddr - vaddr;
+			vaddr = next_vaddr;
 		}
 
 		return BAN::Error::from_errno(EFAULT);
