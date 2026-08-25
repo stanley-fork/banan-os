@@ -11,7 +11,7 @@ configure() {
 
 build() {
 	if [ ! -f ../doom1.wad ]; then
-		wget https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad -O ../doom1.wad || exit 1
+		wget 'https://bananymous.com/files/doom1.wad' -O ../doom1.wad || exit 1
 	fi
 
 	make -C doomgeneric -f Makefile.sdl CC="$CC" SDL_PATH="$BANAN_SYSROOT/usr/bin/" || exit 1

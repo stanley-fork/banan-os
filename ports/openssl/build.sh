@@ -20,7 +20,7 @@ post_install() {
 	openssl rehash "$BANAN_SYSROOT/etc/cacert/extracted"
 	find "$BANAN_SYSROOT/etc/cacert/extracted" -type l -print0 |
 	while IFS= read -r -d '' link; do
-		ln -s "../../cacert/extracted/$(readlink "$link")" "$DESTDIR/etc/ssl/certs/${link##*/}"
+		ln -sf "../../cacert/extracted/$(readlink "$link")" "$DESTDIR/etc/ssl/certs/${link##*/}"
 		rm "$link"
 	done
 }

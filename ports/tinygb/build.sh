@@ -15,5 +15,6 @@ build() {
 }
 
 install() {
+	mkdir -p "$DESTDIR/usr/bin/"
 	cp -v tinygb "$DESTDIR/usr/bin/" || exit 1
 }

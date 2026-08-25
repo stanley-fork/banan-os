@@ -16,7 +16,7 @@ CONFIGURE_OPTIONS=(
 )
 
 post_install() {
-	if [ ! -L $DESTDIR/usr/bin/sh ]; then
-		ln -s bash $DESTDIR/usr/bin/sh
+	if [ ! -L "$DESTDIR/usr/bin/sh" ]; then
+		ln -sv "bash $DESTDIR/usr/bin/sh"
 	fi
 }

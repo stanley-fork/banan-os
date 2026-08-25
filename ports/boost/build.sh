@@ -17,9 +17,11 @@ configure() {
 }
 
 build() {
-	./b2 --user-config=user-config.jam toolset=gcc target-os=banan_os || exit 1
+	./b2 --user-config=user-config.jam \
+		toolset=gcc target-os=banan_os || exit 1
 }
 
 install() {
-	./b2 --user-config=user-config.jam toolset=gcc target-os=banan_os install || exit 1
+	./b2 --user-config=user-config.jam --prefix="$DESTDIR/usr" \
+		toolset=gcc target-os=banan_os install || exit 1
 }

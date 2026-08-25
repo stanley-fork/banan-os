@@ -26,5 +26,6 @@ configure() {
 }
 
 post_install() {
-	ln -sf $tcc_arch-tcc $DESTDIR/usr/bin/tcc
+	mkdir -p "$DESTDIR/usr/bin"
+	ln -svf $tcc_arch-tcc "$DESTDIR/usr/bin/tcc"
 }

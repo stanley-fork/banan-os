@@ -10,5 +10,5 @@ configure() {
 
 install() {
 	mkdir -p "$DESTDIR/usr/bin"
-	cp src/nyancat "$DESTDIR/usr/bin/"
+	cp -v src/nyancat "$DESTDIR/usr/bin/" || exit 1
 }

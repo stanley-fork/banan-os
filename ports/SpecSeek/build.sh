@@ -19,5 +19,6 @@ build() {
 }
 
 install() {
+	mkdir -p "$DESTDIR/usr/bin"
 	cp -v bin/gcc/$specseek_arch/specseek_$specseek_arch "$DESTDIR/usr/bin/specseek" || exit 1
 }

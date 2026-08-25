@@ -18,5 +18,5 @@ CONFIGURE_OPTIONS=(
 
 post_install() {
 	mkdir -p "$DESTDIR/usr/bin"
-	ln -sf python3 "$DESTDIR/usr/bin/python"
+	ln -svf python3 "$DESTDIR/usr/bin/python" || exit 1
 }

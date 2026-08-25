@@ -22,7 +22,8 @@ install() {
 	mkdir -p "$DESTDIR/usr/include"
 	cp -v bzlib.h "$DESTDIR/usr/include/" || exit 1
 
-	cat > $DESTDIR/usr/lib/pkgconfig/bzip2.pc << EOF
+	mkdir -p "$DESTDIR/usr/lib/pkgconfig"
+	cat > "$DESTDIR/usr/lib/pkgconfig/bzip2.pc" << EOF
 prefix=/usr
 exec_prefix=\${prefix}
 bindir=\${exec_prefix}/bin
