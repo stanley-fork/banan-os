@@ -146,6 +146,13 @@ locale_t __getlocale(int category)
 
 #include <BAN/Debug.h>
 
+locale_t duplocale(locale_t locobj)
+{
+	(void)locobj;
+	dwarnln("TODO: duplocale");
+	return nullptr;
+}
+
 locale_t newlocale(int category_mask, const char* locale, locale_t base)
 {
 	(void)category_mask;
