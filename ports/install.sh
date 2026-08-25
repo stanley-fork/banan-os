@@ -15,7 +15,11 @@ installed_file="$BANAN_PORT_DIR/.installed_ports"
 if [ -z $DONT_REMOVE_INSTALLED ]; then
 	export DONT_REMOVE_INSTALLED=1
 	rm -f "$installed_file"
+	rm -rf "$BANAN_SYSROOT/var/db/xbps"
 fi
+
+PACKAGE_ROOT="$BANAN_PORT_DIR/package"
+PACKAGE_REPO="$PACKAGE_ROOT/repo"
 
 export PATH="$BANAN_TOOLCHAIN_PREFIX/bin:$PATH"
 
@@ -117,7 +121,7 @@ install() {
 	done
 }
 
-source $1
+source "$1"
 
 if [ -z $DESCRIPTION ]; then
 	DESCRIPTION="TODO description for $NAME"
@@ -154,7 +158,16 @@ for dependency in "${DEPENDENCIES[@]}"; do
 
 	pushd "../$dependency" >/dev/null
 	pwd
-	if ! ./build.sh; then
+
+	version_string="$(../get-version-string.sh)"
+	if [ -f "$PACKAGE_REPO/$version_string.xbps" ]; then
+		xbps-install \
+			-r "$BANAN_SYSROOT" \
+			-R "$PACKAGE_REPO" \
+			-y "$dependency" \
+		 || exit 1
+		echo "${version_string%%_*}" >> "$installed_file"
+	elif ! ./build.sh; then
 		echo "Failed to install dependency '$dependency' of port '$NAME'"
 		exit 1
 	fi
@@ -266,28 +279,28 @@ find "$BANAN_SYSROOT/usr/lib" -name '*.la' -delete
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
 
 if (( $PACKAGE )); then
-	PACKAGE_DIR="$BANAN_PORT_DIR/package"
+	mkdir -p "$PACKAGE_ROOT"
 
-	version="$VERSION"
-	if [[ "$version" = 'git' ]]; then
-		version=0.0
-	fi
+	version_string=$(cd .. && ../get-version-string.sh)
 
-	package_dir="${PACKAGE_DIR}/${NAME}-${version}_${REVISION}-${BANAN_ARCH}"
-	mkdir "$package_dir" &>/dev/null || exit 0
+	package_dir="$PACKAGE_ROOT/$version_string"
+
+	rm -rf "$package_dir"
+	mkdir "$package_dir"
 
 	dependencies=''
 	for dep in "${DEPENDENCIES[@]}"; do
 		dependencies+="$dep>=0 "
 	done
-	echo $dependencies > "$package_dir.deps"
 
 	DESTDIR="$package_dir"
 	pre_install
 	install
 	post_install
+	find "$DESTDIR/usr/lib" -name '*.la' -delete
 
-	mkdir -p "$PACKAGE_DIR/repo"
-	cd "$PACKAGE_DIR/repo"
-	xbps-create -A $BANAN_ARCH -n "$NAME-${version}_$REVISION" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
+	mkdir -p "$PACKAGE_REPO"
+	cd "$PACKAGE_REPO"
+	xbps-create -A "$BANAN_ARCH" -n "${version_string%.*}" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
+	xbps-rindex -af "$version_string.xbps"
 fi

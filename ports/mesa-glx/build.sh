@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash ../install.sh
 
-export MESA_VARIANT='glx'
-exec ../mesa/build.sh
+MESA_VARIANT='glx'
+source ../mesa/build.sh
