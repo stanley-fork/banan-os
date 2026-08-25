@@ -427,10 +427,15 @@ namespace Kernel
 			case 'n':
 				if (m_ansi_state.nums[0] == 6)
 				{
+					// NOTE: this is very hacky but should be fine as long
+					//       as kernel doesn't use this
+					while (!m_input_mutex.try_lock())
+						Processor::pause();
 					BAN::Formatter::print(
 						[this](char ch) { handle_input_byte(ch); },
 						"\e[{};{}R", m_row + 1, m_column + 1
 					);
+					m_input_mutex.unlock();
 					return reset_ansi();
 				};
 				reset_ansi();
