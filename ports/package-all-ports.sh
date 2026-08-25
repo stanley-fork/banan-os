@@ -17,7 +17,7 @@ package_standalone() {
 		done
 
 		find "$BANAN_SYSROOT/usr/lib" \( -type f -o -type l \) -delete
-		PACKAGE=1 ./build.sh || echo "$port_name" >> ../failed-shit
+		PACKAGE=1 ./build.sh || echo "$port_name" >> ../failed-ports
 	fi
 
 	popd >/dev/null

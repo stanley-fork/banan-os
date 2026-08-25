@@ -251,11 +251,10 @@ build_xbps() {
 	echo "Building xbps-$XBPS_VERSION"
 
 	CFLAGS=-Wno-discarded-qualifiers \
-	./configure \
-		--prefix="$BANAN_TOOLCHAIN_PREFIX" \
-		--dbdir="$BANAN_TOOLCHAIN_PREFIX/db"
+	./configure --prefix="$BANAN_TOOLCHAIN_PREFIX"
 	make $MAKE_JOBS
-	make install
+	make install || true
+	echo 'The previous error is expected :)'
 }
 
 BUILD_BINUTILS=1

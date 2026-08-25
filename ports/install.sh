@@ -161,7 +161,7 @@ for dependency in "${DEPENDENCIES[@]}"; do
 
 	version_string="$(../get-version-string.sh)"
 	if [ -f "$PACKAGE_REPO/$version_string.xbps" ]; then
-		xbps-install \
+		run_xbps xbps-install \
 			-r "$BANAN_SYSROOT" \
 			-R "$PACKAGE_REPO" \
 			-y "$dependency" \
@@ -275,7 +275,10 @@ DESTDIR="$BANAN_SYSROOT"
 pre_install
 install
 post_install
+
 find "$BANAN_SYSROOT/usr/lib" -name '*.la' -delete
+rm -f "$BANAN_SYSROOT/usr/share/info/dir"
+
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
 
 if (( $PACKAGE )); then
@@ -297,7 +300,9 @@ if (( $PACKAGE )); then
 	pre_install
 	install
 	post_install
+
 	find "$DESTDIR/usr/lib" -name '*.la' -delete
+	rm -f "$DESTDIR/usr/share/info/dir"
 
 	mkdir -p "$PACKAGE_REPO"
 	cd "$PACKAGE_REPO"
