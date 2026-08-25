@@ -11,6 +11,7 @@ CONFIGURE_OPTIONS=(
 	'-Dgnome_proxy=disabled'
 	'-Dgnutls=disabled'
 	'-Dopenssl=enabled'
+	'-Dc_link_args=-lgcc_s' # something is messed up with my toolchain
 )
 
 configure() {

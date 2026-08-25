@@ -3,7 +3,7 @@
 NAME='fontconfig'
 VERSION='2.17.1'
 DOWNLOAD_URL="https://gitlab.freedesktop.org/fontconfig/fontconfig/-/archive/$VERSION/fontconfig-$VERSION.tar.gz#82e73b26adad651b236e5f5d4b3074daf8ff0910188808496326bd3449e5261d"
-DEPENDENCIES=('harfbuzz' 'freetype' 'expat' 'libiconv' 'dejavu-fonts-ttf')
+DEPENDENCIES=('freetype' 'expat' 'libiconv' 'dejavu-fonts-ttf')
 CONFIGURE_OPTIONS=(
 	'-Dprefix=/usr'
 	'-Dbuildtype=release'

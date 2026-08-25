@@ -3,7 +3,7 @@
 NAME='poppler'
 VERSION='26.03.0'
 DOWNLOAD_URL="https://poppler.freedesktop.org/poppler-$VERSION.tar.xz#8b3c5e2a9f2ab4c3ec5029f28af1b433c6b71f0d1e7b3997aa561cf1c0ca4ebe"
-DEPENDENCIES=('gtk3' 'cairo' 'boost' 'poppler-data')
+DEPENDENCIES=('gtk3' 'cairo' 'boost' 'curl' 'lcms2' 'libtiff' 'poppler-data')
 
 configure() {
 	cmake --fresh -B build -S . -G Ninja \

@@ -7,6 +7,7 @@ DEPENDENCIES=('ncurses')
 CONFIG_SUB=('config.sub')
 CONFIGURE_OPTIONS=(
 	'ac_cv_header_glob_h=no'
+	'CFLAGS=-Dpthread_self=pthread_self'
 )
 
 pre_configure() {
