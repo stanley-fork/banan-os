@@ -1,0 +1,14 @@
+diff -ru python-3.14.7/Modules/selectmodule.c python-3.14.7-banan_os/Modules/selectmodule.c
+--- python-3.14.7/Modules/selectmodule.c	2026-08-05 13:29:49.000000000 +0300
++++ python-3.14.7-banan_os/Modules/selectmodule.c	2026-08-25 12:39:57.421740199 +0300
+@@ -71,6 +71,10 @@
+ #  define SOCKET int
+ #endif
+ 
++#ifdef __banan_os__
++#include <sys/select.h>
++#endif
++
+ // WASI SDK 16 does not have POLLPRIO, define as no-op
+ #if defined(__wasi__) && !defined(POLLPRI)
+ #  define POLLPRI 0

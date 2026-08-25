@@ -1,0 +1,12 @@
+diff -ru python-3.14.7/Objects/mimalloc/prim/unix/prim.c python-3.14.7-banan_os/Objects/mimalloc/prim/unix/prim.c
+--- python-3.14.7/Objects/mimalloc/prim/unix/prim.c	2026-08-05 13:29:49.000000000 +0300
++++ python-3.14.7-banan_os/Objects/mimalloc/prim/unix/prim.c	2026-08-25 12:39:57.457423411 +0300
+@@ -608,7 +608,7 @@
+   getrusage(RUSAGE_SELF, &rusage);
+   pinfo->utime = timeval_secs(&rusage.ru_utime);
+   pinfo->stime = timeval_secs(&rusage.ru_stime);
+-#if !defined(__HAIKU__)
++#if !defined(__HAIKU__) && !defined(__banan_os__)
+   pinfo->page_faults = rusage.ru_majflt;
+ #endif
+ #if defined(__HAIKU__)

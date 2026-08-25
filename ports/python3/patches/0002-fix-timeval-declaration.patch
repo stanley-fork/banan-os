@@ -1,0 +1,12 @@
+diff -ru python-3.14.7/Include/internal/pycore_time.h python-3.14.7-banan_os/Include/internal/pycore_time.h
+--- python-3.14.7/Include/internal/pycore_time.h	2026-08-05 13:29:49.000000000 +0300
++++ python-3.14.7-banan_os/Include/internal/pycore_time.h	2026-08-25 12:39:57.210172412 +0300
+@@ -59,7 +59,7 @@
+ 
+ #include "pycore_runtime_structs.h" // _PyTimeFraction
+ 
+-#ifdef __clang__
++#if defined(__clang__) || defined(__banan_os__)
+ struct timeval;
+ #endif
+ 

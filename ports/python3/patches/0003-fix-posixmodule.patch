@@ -1,0 +1,36 @@
+diff -ru python-3.14.7/Modules/posixmodule.c python-3.14.7-banan_os/Modules/posixmodule.c
+--- python-3.14.7/Modules/posixmodule.c	2026-08-05 13:29:49.000000000 +0300
++++ python-3.14.7-banan_os/Modules/posixmodule.c	2026-08-25 12:39:57.421224835 +0300
+@@ -15351,11 +15351,19 @@
+ os_eventfd_read_impl(PyObject *module, int fd)
+ /*[clinic end generated code: output=8f2c7b59a3521fd1 input=110f8b57fa596afe]*/
+ {
++#ifndef __banan_os__
+     eventfd_t value;
++#else
++	uint64_t value;
++#endif
+     int result;
+     Py_BEGIN_ALLOW_THREADS
++#ifndef __banan_os__
+     result = eventfd_read(fd, &value);
+-    Py_END_ALLOW_THREADS
++#else
++	result = (read(fd, &value, sizeof(value)) == sizeof(value)) ? 0 : -1;
++#endif
++	Py_END_ALLOW_THREADS
+     if (result == -1) {
+         return PyErr_SetFromErrno(PyExc_OSError);
+     }
+@@ -15377,7 +15385,11 @@
+ {
+     int result;
+     Py_BEGIN_ALLOW_THREADS
++#ifndef __banan_os__
+     result = eventfd_write(fd, value);
++#else
++	result = (write(fd, &value, sizeof(value)) == sizeof(value)) ? 0 : -1;
++#endif
+     Py_END_ALLOW_THREADS
+     if (result == -1) {
+         return PyErr_SetFromErrno(PyExc_OSError);

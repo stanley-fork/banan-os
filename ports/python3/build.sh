@@ -1,25 +1,22 @@
 #!/bin/bash ../install.sh
 
 NAME='python'
-VERSION='3.13.3'
-DOWNLOAD_URL="https://www.python.org/ftp/python/$VERSION/Python-$VERSION.tar.xz#40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041"
+VERSION='3.14.7'
+DOWNLOAD_URL="https://www.python.org/ftp/python/$VERSION/Python-$VERSION.tar.xz#3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81"
 TAR_CONTENT="Python-$VERSION"
-DEPENDENCIES=('ncurses' 'zlib' 'openssl')
+DEPENDENCIES=('ncurses' 'openssl' 'libffi' 'zlib' 'zstd' 'bzip2')
 CONFIG_SUB=('config.sub')
 CONFIGURE_OPTIONS=(
 	"--build=$(uname -m)-pc-linux-gnu"
-	"--with-build-python=python3.13"
-	'--without-ensurepip'
+	'--with-build-python=python3.14'
 	'--disable-ipv6'
-	'--disable-test-modules'
 	'--enable-shared'
+	'--disable-test-modules'
 	'ac_cv_file__dev_ptmx=no'
 	'ac_cv_file__dev_ptc=no'
 )
 
-pre_configure() {
-	if ! command -v python3.13 &>/dev/null ; then
-		echo "You need to have python3.13 installed on your host machine" >&2
-		exit 1
-	fi
+post_install() {
+	mkdir -p "$DESTDIR/usr/bin"
+	ln -sf python3 "$DESTDIR/usr/bin/python"
 }
