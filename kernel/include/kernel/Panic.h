@@ -24,10 +24,12 @@ namespace Kernel
 
 		{
 			SpinLockGuard _(Debug::s_debug_lock);
-			derrorln("Kernel panic at {}", location);
+			BAN::Formatter::print(Debug::putchar, "\e[31m");
+			BAN::Formatter::print(Debug::putchar, "Kernel panic at {}\r\n", location);
 			if (had_debug_lock)
-				derrorln("  while having debug lock...");
-			derrorln(message, BAN::forward<Args>(args)...);
+				BAN::Formatter::print(Debug::putchar, "  while having debug lock...\r\n");
+			BAN::Formatter::print(Debug::putchar, message, BAN::forward<Args>(args)...);
+			BAN::Formatter::print(Debug::putchar, "\e[m\r\n");
 			if (!g_paniced)
 			{
 				Debug::dump_stack_trace();
