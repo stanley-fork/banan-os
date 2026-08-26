@@ -172,12 +172,15 @@ static T strtoT(const CHAR* str, CHAR** endp, int& error)
 
 	// find nan end including possible n-char-sequence
 	const auto get_nan_end = [](const CHAR* str) -> const CHAR* {
-		ASSERT(traits::strncasecmp(str, traits::lit_nan, 3) == 0);
 		if (str[3] != CHAR('('))
 			return str + 3;
-		for (size_t i = 4; traits::isalnum(str[i]) || str[i] == CHAR('_'); i++)
+		for (size_t i = 4;; i++)
+		{
 			if (str[i] == CHAR(')'))
 				return str + i + 1;
+			if (!traits::isalnum(str[i]) && str[i] != CHAR('_'))
+				break;
+		}
 		return str + 3;
 	};
 
@@ -214,6 +217,7 @@ static T strtoT(const CHAR* str, CHAR** endp, int& error)
 	}
 
 	// no conversion can be performed -- not ([digit] || .[digit])
+	// NOTE: the hexadecimal 0x prefix passes this
 	if (!(traits::isdigit(*str) || (str[0] == CHAR('.') && traits::isdigit(str[1]))))
 	{
 		if (endp)
@@ -222,96 +226,110 @@ static T strtoT(const CHAR* str, CHAR** endp, int& error)
 		return 0;
 	}
 
-	int base = 10;
-	int exponent = 0;
-	int exponents_per_digit = 1;
-
-	// check whether we have base 16 value -- (0x[xdigit] || 0x.[xdigit])
-	if (traits::strncasecmp(str, traits::lit_0x, 2) == 0 && (traits::isxdigit(str[2]) || (str[2] == CHAR('.') && traits::isxdigit(str[3]))))
-	{
-		base = 16;
-		exponents_per_digit = 4;
+	const bool is_hexadecimal = (traits::strncasecmp(str, traits::lit_0x, 2) == 0 && (traits::isxdigit(str[2]) || (str[2] == CHAR('.') && traits::isxdigit(str[3]))));
+	if (is_hexadecimal)
 		str += 2;
-	}
 
-	// parse whole part
-	T result = 0;
-	T multiplier = 1;
-	while (true)
-	{
-		int digit = get_base_digit(*str, base);
-		if (digit == -1)
-			break;
+	// skip leading zeros to increase percision
+	while (str[0] == CHAR('0'))
 		str++;
 
-		if (result)
-			exponent += exponents_per_digit;
-		if (digit)
-			result += multiplier * digit;
-		if (result)
-			multiplier /= base;
-	}
+	const int base = is_hexadecimal ? 16 : 10;
+	const int max_digits = 2 + (is_hexadecimal
+		? BAN::numeric_limits<T>::hexadecimal_digits()
+		: BAN::numeric_limits<T>::decimal_digits());
 
-	if (*str == CHAR('.'))
-		str++;
+	int digit;
 
-	while (true)
+	T significant = 0;
+	int significant_digits = 0;
+	int exponent = 0;
+
+	// extract decimal part
+	if ((digit = get_base_digit(str[0], base)) != -1)
 	{
-		const int digit = get_base_digit(*str, base);
-		if (digit == -1)
-			break;
-		str++;
-
-		if (result == 0)
-			exponent -= exponents_per_digit;
-		if (digit)
-			result += multiplier * digit;
-		if (result)
-			multiplier /= base;
-	}
-
-	if (traits::tolower(*str) == (base == 10 ? CHAR('e') : CHAR('p')))
-	{
-		CHAR* maybe_end = nullptr;
-		int exp_error = 0;
-
-		const int extra_exponent = strtoT<int>(str + 1, &maybe_end, 10, exp_error);
-		if (exp_error != EINVAL)
+		while ((digit = get_base_digit(str[0], base)) != -1)
 		{
-			if (exp_error == ERANGE || BAN::Math::will_addition_overflow(exponent, extra_exponent))
-				exponent = negative ? BAN::numeric_limits<int>::min() : BAN::numeric_limits<int>::max();
+			if (significant_digits >= max_digits)
+				exponent++;
+			else
+			{
+				significant = significant * base + digit;
+				significant_digits++;
+			}
+			str++;
+		}
+
+		if (str[0] == CHAR('.'))
+			str++;
+	}
+	else if (str[0] == CHAR('.'))
+	{
+		str++;
+
+		int zeroes = 0;
+		while (str[zeroes] == CHAR('0'))
+			zeroes++;
+
+		exponent = -zeroes;
+		str += zeroes;
+	}
+
+	// extract fractional part
+	while ((digit = get_base_digit(str[0], base)) != -1)
+	{
+		if (significant_digits < max_digits)
+		{
+			significant = significant * base + digit;
+			significant_digits++;
+			exponent--;
+		}
+		str++;
+	}
+
+	// each hexadecimal digit is 4 bits
+	if (is_hexadecimal)
+		exponent *= 4;
+
+	// extract possible exponent
+	if (traits::tolower(*str) == (is_hexadecimal ? CHAR('p') : CHAR('e')))
+	{
+		int error;
+		CHAR* exp_end;
+		const int extra_exponent = strtoT<int>(str + 1, &exp_end, 10, error);
+
+		if (error != EINVAL)
+		{
+			if (error == ERANGE || BAN::Math::will_addition_overflow(exponent, extra_exponent))
+				exponent = (exponent < 0) ? BAN::numeric_limits<int>::min() : BAN::numeric_limits<int>::max();
 			else
 				exponent += extra_exponent;
-			str = maybe_end;
+			str = exp_end;
 		}
 	}
 
 	if (endp)
 		*endp = const_cast<CHAR*>(str);
 
-	// no over/underflow can happed with zero
-	if (result == 0)
-		return 0;
-
-	const int max_exponent = (base == 10) ? BAN::numeric_limits<T>::max_exponent10() : BAN::numeric_limits<T>::max_exponent2();
-	if (exponent > max_exponent)
+	// check overflow and apply exponent
+	if (exponent > (is_hexadecimal ? BAN::numeric_limits<T>::max_exponent2() : BAN::numeric_limits<T>::max_exponent10()))
 	{
 		error = ERANGE;
-		result = BAN::numeric_limits<T>::infinity();
-		return negative ? -result : result;
+		significant = BAN::numeric_limits<T>::infinity();
 	}
-
-	const int min_exponent = (base == 10) ? BAN::numeric_limits<T>::min_exponent10() : BAN::numeric_limits<T>::min_exponent2();
-	if (exponent < min_exponent)
+	else if (exponent < (is_hexadecimal ? BAN::numeric_limits<T>::min_exponent2() : BAN::numeric_limits<T>::min_exponent10()))
 	{
 		error = ERANGE;
-		result = 0;
-		return negative ? -result : result;
+		significant = 0;
+	}
+	else if (exponent)
+	{
+		significant *= BAN::Math::pow<T>(is_hexadecimal ? 2 : 10, exponent);
+		if (!__builtin_isfinite(significant))
+			error = ERANGE;
 	}
 
-	if (exponent)
-		result *= BAN::Math::pow<T>((base == 10) ? 10 : 2, exponent);
-	return negative ? -result : result;
+	return negative ? -significant : significant;
 }
 
 #endif
