@@ -151,6 +151,29 @@ namespace BAN
 				return __LDBL_MIN_10_EXP__;
 			return 0;
 		}
+
+		static inline constexpr int decimal_digits()
+		{
+			if constexpr(is_same_v<T, float>)
+				return __FLT_DECIMAL_DIG__;
+			if constexpr(is_same_v<T, double>)
+				return __DBL_DECIMAL_DIG__;
+			if constexpr(is_same_v<T, long double>)
+				return __LDBL_DECIMAL_DIG__;
+			return 0;
+		}
+
+		static inline constexpr int hexadecimal_digits()
+		{
+			if constexpr(is_same_v<T, float>)
+				return (__FLT_MANT_DIG__ + 3) / 4;
+			if constexpr(is_same_v<T, double>)
+				return (__DBL_MANT_DIG__ + 3) / 4;
+			if constexpr(is_same_v<T, long double>)
+				return (__LDBL_MANT_DIG__ + 3) / 4;
+			return 0;
+		}
+
 	};
 
 }
