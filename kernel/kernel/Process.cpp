@@ -1633,7 +1633,7 @@ namespace Kernel
 
 		auto link_target = TRY(inode->link_target());
 
-		const size_t byte_count = BAN::Math::min<size_t>(link_target.size(), bufsize);
+		const size_t byte_count = BAN::Math::min<size_t>(link_target.size() + 1, bufsize);
 		TRY(write_to_user(buffer, link_target.data(), byte_count));
 
 		return byte_count;
