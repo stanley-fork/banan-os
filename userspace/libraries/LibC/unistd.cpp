@@ -50,7 +50,7 @@ __attribute__((noreturn))
 void __stack_chk_fail(void) { abort(); }
 }
 
-static void __dump_backtrace(int fd, mcontext_t*);
+static void __dump_backtrace(int fd, uintptr_t bp, uintptr_t ip);
 
 extern "C" void _init_libc(char** environ, init_funcs_t init_funcs, init_funcs_t fini_funcs)
 {
@@ -100,13 +100,20 @@ extern "C" void _init_libc(char** environ, init_funcs_t init_funcs, init_funcs_t
 				// NOTE: we cannot use stddbg as that is not async-signal-safe.
 				//       POSIX says dprintf isn't either but our implementation is!
 
-				int fd = open("/dev/debug", O_WRONLY);
-				if (fd == -1)
-					perror("open debug device");
-				else
+				if (const int fd = open("/dev/debug", O_WRONLY); fd != -1)
 				{
 					dprintf(fd, "received signal %s, backtrace:\n", signal_name(sig));
-					__dump_backtrace(fd, &static_cast<ucontext_t*>(context)->uc_mcontext);
+
+					const auto& mcontext = static_cast<const ucontext_t*>(context)->uc_mcontext;
+#if defined(__x86_64__)
+					const uintptr_t bp = mcontext.gregs[REG_RBP];
+					const uintptr_t ip = mcontext.gregs[REG_RIP];
+#elif defined(__i686__)
+					const uintptr_t bp = mcontext.gregs[REG_EBP];
+					const uintptr_t ip = mcontext.gregs[REG_EIP];
+#endif
+					__dump_backtrace(fd, bp, ip);
+
 					close(fd);
 				}
 
@@ -174,25 +181,17 @@ static void __dump_symbol(int fd, const void* address)
 #endif
 }
 
-static void __dump_backtrace(int fd, mcontext_t* mcontext)
+static void __dump_backtrace(int fd, uintptr_t bp, uintptr_t ip)
 {
-#if defined(__x86_64__)
-	const uintptr_t stack_base  = mcontext->gregs[REG_RBP];
-	const uintptr_t instruction = mcontext->gregs[REG_RIP];
-#elif defined(__i686__)
-	const uintptr_t stack_base  = mcontext->gregs[REG_EBP];
-	const uintptr_t instruction = mcontext->gregs[REG_EIP];
-#endif
-
 	struct stackframe
 	{
 		const stackframe* bp;
-		void* ip;
+		const void* ip;
 	};
 
-	const auto* stackframe = reinterpret_cast<struct stackframe*>(stack_base);
+	const auto* stackframe = reinterpret_cast<struct stackframe*>(bp);
 
-	__dump_symbol(fd, reinterpret_cast<void*>(instruction));
+	__dump_symbol(fd, reinterpret_cast<const void*>(ip));
 	for (size_t i = 0; i < 128 && stackframe; i++)
 	{
 		__dump_symbol(fd, stackframe->ip);
