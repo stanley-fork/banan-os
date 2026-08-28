@@ -74,9 +74,6 @@ namespace Kernel
 
 		uint32_t m_thread_count { 0 };
 
-		InterruptStack* m_interrupt_stack { nullptr };
-		InterruptRegisters* m_interrupt_registers { nullptr };
-
 		uint64_t m_next_reschedule_ns { 0 };
 		uint64_t m_last_load_balance_ns { 0 };
 
