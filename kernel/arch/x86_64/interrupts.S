@@ -45,11 +45,20 @@
 isr_stub:
 	intr_header 24
 
-	movq 120(%rsp), %rdi // isr number
-	movq 128(%rsp), %rsi // error code
-	leaq 136(%rsp), %rdx // interrupt stack ptr
+	subq $8, %rsp
+	movq %cr2, %rax
+	pushq %rax
+
+	testq $(1 << 9), 168(%rsp)
+	jz 1f; sti; 1:
+
+	movq 136(%rsp), %rdi // isr number
+	movq 144(%rsp), %rsi // error code
+	leaq 152(%rsp), %rdx // interrupt stack ptr
 	movq %rsp, %rcx      // register ptr
 	call cpp_isr_handler
+
+	addq $16, %rsp
 
 	intr_footer 24
 	addq $16, %rsp
