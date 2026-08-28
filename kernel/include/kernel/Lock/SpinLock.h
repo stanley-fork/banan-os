@@ -3,7 +3,8 @@
 #include <BAN/Assert.h>
 #include <BAN/Atomic.h>
 #include <BAN/NoCopyMove.h>
-#include <kernel/Processor.h>
+#include <kernel/InterruptState.h>
+#include <kernel/ProcessorID.h>
 
 #include <sys/types.h>
 
@@ -24,12 +25,9 @@ namespace Kernel
 
 		void unlock(InterruptState state);
 
-		uint32_t lock_depth() const { return current_processor_has_lock(); }
+		uint32_t lock_depth() const;
 
-		bool current_processor_has_lock() const
-		{
-			return m_locker.load(BAN::MemoryOrder::memory_order_relaxed) == Processor::current_id().as_u32();
-		}
+		bool current_processor_has_lock() const;
 
 	private:
 		BAN::Atomic<ProcessorID::value_type> m_locker { PROCESSOR_NONE.as_u32() };
@@ -49,12 +47,9 @@ namespace Kernel
 
 		void unlock(InterruptState state);
 
-		uint32_t lock_depth() const { return m_lock_depth; }
+		uint32_t lock_depth() const;
 
-		bool current_processor_has_lock() const
-		{
-			return m_locker.load(BAN::MemoryOrder::memory_order_relaxed) == Processor::current_id().as_u32();
-		}
+		bool current_processor_has_lock() const;
 
 	private:
 		BAN::Atomic<ProcessorID::value_type> m_locker { PROCESSOR_NONE.as_u32() };

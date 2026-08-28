@@ -4,6 +4,7 @@
 #include <BAN/Traits.h>
 #include <kernel/Lock/SpinLock.h>
 #include <kernel/Memory/Types.h>
+#include <kernel/Processor.h>
 
 namespace Kernel
 {

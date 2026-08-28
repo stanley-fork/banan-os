@@ -1,4 +1,5 @@
 #include <kernel/Lock/SpinLock.h>
+#include <kernel/Processor.h>
 #include <kernel/Thread.h>
 
 namespace Kernel
@@ -51,6 +52,18 @@ namespace Kernel
 			Thread::current().remove_spinlock();
 		Processor::set_interrupt_state(state);
 	}
+
+	uint32_t SpinLock::lock_depth() const
+	{
+		return current_processor_has_lock() ? 1 : 0;
+	}
+
+	bool SpinLock::current_processor_has_lock() const
+	{
+		return m_locker.load(BAN::MemoryOrder::memory_order_relaxed) == Processor::current_id().as_u32();
+	}
+
+
 
 	InterruptState RecursiveSpinLock::lock()
 	{
@@ -105,6 +118,16 @@ namespace Kernel
 		if (Thread::current_tid())
 			Thread::current().remove_spinlock();
 		Processor::set_interrupt_state(state);
+	}
+
+	uint32_t RecursiveSpinLock::lock_depth() const
+	{
+		return m_lock_depth;
+	}
+
+	bool RecursiveSpinLock::current_processor_has_lock() const
+	{
+		return m_locker.load(BAN::MemoryOrder::memory_order_relaxed) == Processor::current_id().as_u32();
 	}
 
 }

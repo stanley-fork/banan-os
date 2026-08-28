@@ -5,6 +5,7 @@
 #include <BAN/Vector.h>
 #include <kernel/Interruptable.h>
 #include <kernel/Lock/Mutex.h>
+#include <kernel/ThreadBlocker.h>
 
 namespace Kernel
 {

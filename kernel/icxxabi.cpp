@@ -1,4 +1,5 @@
 #include <kernel/Panic.h>
+#include <kernel/Processor.h>
 
 #define ATEXIT_MAX_FUNCS 128
 

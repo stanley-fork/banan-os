@@ -6,6 +6,7 @@
 
 #include <kernel/ACPI/AML/Scope.h>
 #include <kernel/Lock/Mutex.h>
+#include <kernel/Thread.h>
 #include <kernel/ThreadBlocker.h>
 
 namespace Kernel::ACPI

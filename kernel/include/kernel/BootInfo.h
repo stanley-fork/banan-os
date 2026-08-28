@@ -4,6 +4,7 @@
 #include <BAN/StringView.h>
 #include <BAN/Vector.h>
 #include <kernel/RSDP.h>
+#include <kernel/Memory/Types.h>
 
 namespace Kernel
 {
