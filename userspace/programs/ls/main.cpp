@@ -19,10 +19,12 @@ struct Config
 		AlmostAll,
 		All
 	};
-	Visibility visibility { Visibility::Normal };
-	bool show_as_list     { false };
-	bool human_readable   { false };
-	bool directory        { false };
+	Visibility visibility         { Visibility::Normal };
+	bool show_as_list             { false };
+	bool human_readable           { false };
+	bool directory                { false };
+	bool dereference              { false };
+	bool dereference_command_line { false };
 };
 
 struct simple_entry_t
@@ -178,7 +180,7 @@ int list_directory(const BAN::String& path, Config config)
 
 	struct stat st;
 
-	auto stat_func = config.directory ? lstat : stat;
+	auto stat_func = (config.dereference || config.dereference_command_line) ? stat : lstat;
 	if (stat_func(path.data(), &st) == -1)
 	{
 		perror("stat");
@@ -229,7 +231,7 @@ int list_directory(const BAN::String& path, Config config)
 					break;
 			}
 
-			if (fstatat(dirfd(dirp), dirent->d_name, &st, AT_SYMLINK_NOFOLLOW) == -1)
+			if (fstatat(dirfd(dirp), dirent->d_name, &st, config.dereference ? 0 : AT_SYMLINK_NOFOLLOW) == -1)
 			{
 				perror("fstatat");
 				ret = 1;
@@ -402,16 +404,18 @@ int main(int argc, char* argv[])
 	for (;;)
 	{
 		static option long_options[] {
-			{ "all",            no_argument, nullptr, 'a' },
-			{ "almost-all",     no_argument, nullptr, 'A' },
-			{ "directory" ,     no_argument, nullptr, 'd' },
-			{ "human-readable", no_argument, nullptr, 'h' },
-			{ "list",           no_argument, nullptr, 'l' },
-			{ "help",           no_argument, nullptr,  0  },
+			{ "all",                      no_argument, nullptr, 'a' },
+			{ "almost-all",               no_argument, nullptr, 'A' },
+			{ "directory" ,               no_argument, nullptr, 'd' },
+			{ "human-readable",           no_argument, nullptr, 'h' },
+			{ "list",                     no_argument, nullptr, 'l' },
+			{ "dereference",              no_argument, nullptr, 'L' },
+			{ "dereference-command-line", no_argument, nullptr, 'H' },
+			{ "help",                     no_argument, nullptr,  0  },
 			{}
 		};
 
-		int ch = getopt_long(argc, argv, "aAlh", long_options, nullptr);
+		int ch = getopt_long(argc, argv, "aAdhlLH", long_options, nullptr);
 		if (ch == -1)
 			break;
 
@@ -432,6 +436,12 @@ int main(int argc, char* argv[])
 			case 'l':
 				config.show_as_list = true;
 				break;
+			case 'L':
+				config.dereference = true;
+				break;
+			case 'H':
+				config.dereference_command_line = true;
+				break;
 			case 0:
 				fprintf(stderr, "usage: %s [OPTION]... [FILE]...\n", argv[0]);
 				fprintf(stderr, "  list information about FILEs\n");
@@ -441,6 +451,9 @@ int main(int argc, char* argv[])
 				fprintf(stderr, "  -d, --directory       list directories and not their contents\n");
 				fprintf(stderr, "  -h, --human-readable  print sizes in human readable form\n");
 				fprintf(stderr, "  -l, --list            use long listing format\n");
+				fprintf(stderr, "  -L, --dereference     resolve symbolic links\n");
+				fprintf(stderr, "  -H, --dereference-command-line\n");
+				fprintf(stderr, "                        resolve symbolic links from command line arguments\n");
 				fprintf(stderr, "      --help            show this message and exit\n");
 				return 0;
 			case ':': case '?':
