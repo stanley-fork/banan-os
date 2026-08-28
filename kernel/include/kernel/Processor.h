@@ -7,17 +7,12 @@
 
 #include <kernel/API/SharedPage.h>
 #include <kernel/Arch.h>
+#include <kernel/InterruptState.h>
 #include <kernel/Memory/Types.h>
 #include <kernel/ProcessorID.h>
 
 namespace Kernel
 {
-
-	enum class InterruptState
-	{
-		Disabled,
-		Enabled,
-	};
 
 	class GDT;
 	class IDT;
