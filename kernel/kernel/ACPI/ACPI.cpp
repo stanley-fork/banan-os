@@ -315,7 +315,7 @@ acpi_release_global_lock:
 	{
 		auto opt_rsdp = locate_rsdp();
 		if (!opt_rsdp.has_value())
-			return BAN::Error::from_error_code(ErrorCode::ACPI_NoRootSDT);
+			return BAN::Error::from_errno(ENODEV);
 		const RSDP rsdp = opt_rsdp.release_value();
 
 		uint32_t root_entry_count = 0;
@@ -327,9 +327,9 @@ acpi_release_global_lock:
 				{
 					auto& xsdt = PageTable::fast_page_as<const XSDT>(rsdp.xsdt_address % PAGE_SIZE);
 					if (memcmp(xsdt.signature, "XSDT", 4) != 0)
-						return BAN::Error::from_error_code(ErrorCode::ACPI_RootInvalid);
+						return BAN::Error::from_errno(ENODEV);
 					if (!is_valid_std_header(&xsdt))
-						return BAN::Error::from_error_code(ErrorCode::ACPI_RootInvalid);
+						return BAN::Error::from_errno(ENODEV);
 
 					m_header_table_paddr = rsdp.xsdt_address + offsetof(XSDT, entries);
 					m_entry_size = 8;
@@ -345,9 +345,9 @@ acpi_release_global_lock:
 				{
 					auto& rsdt = PageTable::fast_page_as<const RSDT>(rsdp.rsdt_address % PAGE_SIZE);
 					if (memcmp(rsdt.signature, "RSDT", 4) != 0)
-						return BAN::Error::from_error_code(ErrorCode::ACPI_RootInvalid);
+						return BAN::Error::from_errno(ENODEV);
 					if (!is_valid_std_header(&rsdt))
-						return BAN::Error::from_error_code(ErrorCode::ACPI_RootInvalid);
+						return BAN::Error::from_errno(ENODEV);
 
 					m_header_table_paddr = rsdp.rsdt_address + offsetof(RSDT, entries);
 					m_entry_size = 4;

@@ -45,7 +45,6 @@ namespace Kernel
 		void read_buffer(uint16_t, uint16_t*, size_t);
 		void write_buffer(uint16_t, const uint16_t*, size_t);
 		BAN::ErrorOr<void> wait(bool);
-		BAN::Error error();
 
 	private:
 		const uint16_t m_base;

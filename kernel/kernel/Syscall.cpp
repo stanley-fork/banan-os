@@ -92,9 +92,6 @@ namespace Kernel
 			);
 #endif
 
-		if (ret.is_error() && ret.error().is_kernel_error())
-			Kernel::panic("Kernel error while returning to userspace {}", ret.error());
-
 		Process::current().wait_while_stopped();
 
 		if (Thread::current().handle_signal_if_interrupted())

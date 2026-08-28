@@ -73,7 +73,7 @@ namespace Kernel
 		}
 
 		if (m_superblock.magic != Ext2::Enum::SUPER_MAGIC)
-			return BAN::Error::from_error_code(ErrorCode::Ext2_Invalid);
+			return BAN::Error::from_errno(EFAULT);
 
 		if (m_superblock.rev_level == Ext2::Enum::GOOD_OLD_REV)
 		{
@@ -85,7 +85,7 @@ namespace Kernel
 		const uint32_t number_of_block_groups       = BAN::Math::div_round_up(superblock().inodes_count, superblock().inodes_per_group);
 		const uint32_t number_of_block_groups_check = BAN::Math::div_round_up(superblock().blocks_count, superblock().blocks_per_group);
 		if (number_of_block_groups != number_of_block_groups_check)
-			return BAN::Error::from_error_code(ErrorCode::Ext2_Corrupted);
+			return BAN::Error::from_errno(EFAULT);
 
 		if (!(m_superblock.feature_incompat & Ext2::Enum::FEATURE_INCOMPAT_FILETYPE))
 		{
@@ -273,7 +273,7 @@ namespace Kernel
 		}
 
 		derrorln("Corrupted file system. Superblock indicates free inodes but none were found.");
-		return BAN::Error::from_error_code(ErrorCode::Ext2_Corrupted);
+		return BAN::Error::from_errno(EFAULT);
 	}
 
 	BAN::ErrorOr<void> Ext2FS::delete_inode(uint32_t ino)
@@ -455,7 +455,7 @@ namespace Kernel
 					return ret;
 
 		derrorln("Corrupted file system. Superblock indicates free blocks but none were found.");
-		return BAN::Error::from_error_code(ErrorCode::Ext2_Corrupted);
+		return BAN::Error::from_errno(EFAULT);
 	}
 
 	BAN::ErrorOr<void> Ext2FS::release_block(uint32_t block)

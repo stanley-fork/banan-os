@@ -125,7 +125,7 @@ namespace Kernel
 	void ATABus::handle_irq()
 	{
 		if (io_read(ATA_PORT_STATUS) & ATA_STATUS_ERR)
-			dprintln("ATA Error: {}", error());
+			dprintln("ATA Error: {2H}", io_read(ATA_PORT_ERROR));
 		m_thread_blocker.unblock();
 	}
 
@@ -183,9 +183,7 @@ namespace Kernel
 				goto drive_not_ready;
 			if (!wait_drq || (status & ATA_STATUS_DRQ))
 				break;
-			if (status & ATA_STATUS_ERR)
-				return error();
-			if (status & ATA_STATUS_DF)
+			if (status & (ATA_STATUS_DF | ATA_STATUS_ERR))
 				return BAN::Error::from_errno(EIO);
 
 		drive_not_ready:
@@ -202,35 +200,12 @@ namespace Kernel
 		return {};
 	}
 
-	BAN::Error ATABus::error()
-	{
-		uint8_t err = io_read(ATA_PORT_ERROR);
-		if (err & ATA_ERROR_AMNF)
-			return BAN::Error::from_error_code(ErrorCode::ATA_AMNF);
-		if (err & ATA_ERROR_TKZNF)
-			return BAN::Error::from_error_code(ErrorCode::ATA_TKZNF);
-		if (err & ATA_ERROR_ABRT)
-			return BAN::Error::from_error_code(ErrorCode::ATA_ABRT);
-		if (err & ATA_ERROR_MCR)
-			return BAN::Error::from_error_code(ErrorCode::ATA_MCR);
-		if (err & ATA_ERROR_IDNF)
-			return BAN::Error::from_error_code(ErrorCode::ATA_IDNF);
-		if (err & ATA_ERROR_MC)
-			return BAN::Error::from_error_code(ErrorCode::ATA_MC);
-		if (err & ATA_ERROR_UNC)
-			return BAN::Error::from_error_code(ErrorCode::ATA_UNC);
-		if (err & ATA_ERROR_BBK)
-			return BAN::Error::from_error_code(ErrorCode::ATA_BBK);
-
-		return BAN::Error::from_error_code(ErrorCode::None);
-	}
-
 	BAN::ErrorOr<void> ATABus::read(ATADevice& device, uint64_t lba, uint64_t sector_count, BAN::ByteSpan buffer)
 	{
 		ASSERT(sector_count <= 0xFF);
 		ASSERT(buffer.size() >= sector_count * device.sector_size());
 		if (lba + sector_count > device.sector_count())
-			return BAN::Error::from_error_code(ErrorCode::Storage_Boundaries);
+			return BAN::Error::from_errno(EINVAL);
 
 		LockGuard _(m_mutex);
 
@@ -250,7 +225,7 @@ namespace Kernel
 		ASSERT(sector_count <= 0xFF);
 		ASSERT(buffer.size() >= sector_count * device.sector_size());
 		if (lba + sector_count > device.sector_count())
-			return BAN::Error::from_error_code(ErrorCode::Storage_Boundaries);
+			return BAN::Error::from_errno(EINVAL);
 
 		LockGuard _(m_mutex);
 

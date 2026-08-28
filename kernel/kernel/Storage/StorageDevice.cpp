@@ -146,7 +146,7 @@ namespace Kernel
 	BAN::ErrorOr<void> StorageDevice::initialize_partitions(BAN::StringView name_prefix)
 	{
 		if (total_size() < sizeof(GPTHeader))
-			return BAN::Error::from_error_code(ErrorCode::Storage_GPTHeader);
+			return BAN::Error::from_errno(EFAULT);
 
 		BAN::Vector<uint8_t> lba1;
 		TRY(lba1.resize(sector_size()));
@@ -155,21 +155,21 @@ namespace Kernel
 
 		const GPTHeader& header = *(const GPTHeader*)lba1.data();
 		if (!is_valid_gpt_header(header, sector_size()))
-			return BAN::Error::from_error_code(ErrorCode::Storage_GPTHeader);
+			return BAN::Error::from_errno(EFAULT);
 
 		uint32_t size = header.partition_entry_count * header.partition_entry_size;
 		if (uint32_t remainder = size % sector_size())
 			size += sector_size() - remainder;
 
 		if (total_size() < header.partition_entry_lba * sector_size() + size)
-			return BAN::Error::from_error_code(ErrorCode::Storage_GPTHeader);
+			return BAN::Error::from_errno(EFAULT);
 
 		BAN::Vector<uint8_t> entry_array;
 		TRY(entry_array.resize(size));
 		TRY(read_sectors(header.partition_entry_lba, size / sector_size(), BAN::ByteSpan { entry_array.span() }));
 
 		if (!is_valid_gpt_crc32(header, lba1, entry_array))
-			return BAN::Error::from_error_code(ErrorCode::Storage_GPTHeader);
+			return BAN::Error::from_errno(EFAULT);
 
 		for (uint32_t i = 0; i < header.partition_entry_count; i++)
 		{

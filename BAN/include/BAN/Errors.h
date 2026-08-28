@@ -9,7 +9,6 @@
 
 #ifdef __is_kernel
 	#include <kernel/Panic.h>
-	#include <kernel/Errors.h>
 	#define MUST(...)		 ({ auto&& e = (__VA_ARGS__); if (e.is_error()) Kernel::panic("{}", e.error()); e.release_value(); })
 	#define MUST_REF(...)	*({ auto&& e = (__VA_ARGS__); if (e.is_error()) Kernel::panic("{}", e.error()); &e.release_value(); })
 #else
@@ -26,18 +25,8 @@ namespace BAN
 
 	class Error
 	{
-#ifdef __is_kernel
-	private:
-		static constexpr uint64_t kernel_error_mask = uint64_t(1) << 63;
-#endif
-
 	public:
-#ifdef __is_kernel
-		static Error from_error_code(Kernel::ErrorCode error)
-		{
-			return Error((uint64_t)error | kernel_error_mask);
-		}
-#else
+#ifndef __is_kernel
 		template<size_t N>
 		consteval static Error from_literal(const char (&message)[N])
 		{
@@ -50,25 +39,10 @@ namespace BAN
 			return Error(error);
 		}
 
-#ifdef __is_kernel
-		Kernel::ErrorCode kernel_error() const
-		{
-			return (Kernel::ErrorCode)(m_error_code & ~kernel_error_mask);
-		}
-
-		bool is_kernel_error() const
-		{
-			return m_error_code & kernel_error_mask;
-		}
-#endif
-
 		constexpr uint64_t get_error_code() const { return m_error_code; }
 		const char* get_message() const
 		{
-#ifdef __is_kernel
-			if (m_error_code & kernel_error_mask)
-				return Kernel::error_string(kernel_error());
-#else
+#ifndef __is_kernel
 			if (m_message)
 				return m_message;
 #endif
