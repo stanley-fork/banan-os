@@ -193,6 +193,8 @@ __BEGIN_DECLS
 #define R_386_TLS_DTPMOD32 35
 #define R_386_TLS_DTPOFF32 36
 #define R_386_TLS_TPOFF32  37
+#define ELF32_R_SYM(i)  ((i) >> 8)
+#define ELF32_R_TYPE(i) ((i) & 0xFF)
 
 #define R_X86_64_NONE             0
 #define R_X86_64_64               1
@@ -227,6 +229,8 @@ __BEGIN_DECLS
 #define R_X86_64_TLSDESC_CALL    35
 #define R_X86_64_TLSDESC         36
 #define R_X86_64_IRELATIVE       37
+#define ELF64_R_SYM(i)  ((i) >> 32)
+#define ELF64_R_TYPE(i) ((i) & 0xFFFFFFFF)
 
 
 typedef uint32_t Elf32_Addr;
@@ -288,6 +292,29 @@ typedef struct
 	Elf32_Word p_flags;
 	Elf32_Word p_align;
 } Elf32_Phdr;
+
+typedef struct
+{
+	Elf32_Addr r_offset;
+	Elf32_Word r_info;
+} Elf32_Rel;
+
+typedef struct
+{
+	Elf32_Addr r_offset;
+	Elf32_Word r_info;
+	Elf32_Sword r_addend;
+} Elf32_RelA;
+
+typedef struct
+{
+	Elf32_Sword d_tag;
+	union
+	{
+		Elf32_Word d_val;
+		Elf32_Addr d_ptr;
+	} d_un;
+} Elf32_Dyn;
 
 
 typedef uint64_t Elf64_Addr;
@@ -351,6 +378,40 @@ typedef struct
 	Elf64_Xword p_memsz;
 	Elf64_Xword p_align;
 } Elf64_Phdr;
+
+typedef struct
+{
+	Elf64_Addr r_offset;
+	Elf64_Xword r_info;
+} Elf64_Rel;
+
+typedef struct
+{
+	Elf64_Addr r_offset;
+	Elf64_Xword r_info;
+	Elf64_Sxword r_addend;
+} Elf64_RelA;
+
+typedef struct
+{
+	Elf64_Sxword d_tag;
+	union
+	{
+		Elf64_Xword d_val;
+		Elf64_Addr d_ptr;
+	} d_un;
+} Elf64_Dyn;
+
+
+typedef struct
+{
+	uint32_t a_type;
+	union
+	{
+		uint32_t a_val;
+		void* a_ptr;
+	} a_un;
+} Elf_auxv_t;
 
 __END_DECLS
 
