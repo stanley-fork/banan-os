@@ -653,56 +653,38 @@ namespace Kernel
 
 		auto& processor = s_processors[s_processor_ids[index].as_u32()];
 
-		bool expected = false;
-		while (!processor.m_load_stat_lock.compare_exchange(expected, true))
-		{
-			Processor::pause();
-			expected = false;
-		}
+		SpinLockGuard _(processor.m_load_stat_lock);
+		return processor.m_load_stats;
+	}
 
-		const auto load_stats = processor.m_load_stats;
+	void Processor::update_load_stats(bool is_idle)
+	{
+		ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
 
-		processor.m_load_stat_lock.store(false);
+		auto& processor = s_processors[current_id().as_u32()];
 
-		return load_stats;
+		SpinLockGuard _(processor.m_load_stat_lock);
+
+		const uint64_t current_ns = SystemTimer::get().ns_since_boot();
+
+		const uint64_t elapsed_ns = current_ns - processor.m_load_start_ns;
+		processor.m_load_start_ns = current_ns;
+
+		auto& load_stats = processor.m_load_stats;
+		if (is_idle)
+			load_stats.ns_idle += elapsed_ns;
+		load_stats.ns_total += elapsed_ns;
 	}
 
 	void Processor::yield()
 	{
-		auto state = get_interrupt_state();
+		const auto state = get_interrupt_state();
 		set_interrupt_state(InterruptState::Disabled);
 
 		ASSERT(!Thread::current().has_spinlock());
 
 		auto& processor = s_processors[current_id().as_u32()];
-
-		{
-			bool expected = false;
-			while (!processor.m_load_stat_lock.compare_exchange(expected, true))
-			{
-				Processor::pause();
-				expected = false;
-			}
-
-			const uint64_t elapsed_ns = SystemTimer::get().ns_since_boot() - processor.m_load_start_ns;
-
-			auto& load_stats = processor.m_load_stats;
-			if (scheduler().is_idle())
-				load_stats.ns_idle += elapsed_ns;
-			load_stats.ns_total += elapsed_ns;
-
-			processor.m_load_stat_lock.store(false);
-		}
-
-		if (!scheduler().is_idle())
-			Thread::current().set_cpu_time_stop();
-
 		asm_yield_trampoline(processor.stack_top_vaddr());
-
-		processor.m_load_start_ns = SystemTimer::get().ns_since_boot();
-
-		if (!scheduler().is_idle())
-			Thread::current().set_cpu_time_start();
 
 		Processor::set_interrupt_state(state);
 	}

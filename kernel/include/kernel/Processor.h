@@ -8,6 +8,7 @@
 #include <kernel/API/SharedPage.h>
 #include <kernel/Arch.h>
 #include <kernel/InterruptState.h>
+#include <kernel/Lock/SpinLock.h>
 #include <kernel/Memory/Types.h>
 #include <kernel/ProcessorID.h>
 
@@ -125,6 +126,8 @@ namespace Kernel
 
 		static LoadStats get_load_stats(size_t index);
 
+		static void update_load_stats(bool is_idle);
+
 		static void yield();
 		static Scheduler& scheduler() { return *read_gs_sized<Scheduler*>(offsetof(Processor, m_scheduler)); }
 
@@ -223,7 +226,7 @@ namespace Kernel
 
 		Scheduler* m_scheduler { nullptr };
 
-		BAN::Atomic<bool> m_load_stat_lock;
+		SpinLock m_load_stat_lock;
 		uint64_t m_load_start_ns { 0 };
 		LoadStats m_load_stats {};
 

@@ -141,6 +141,8 @@ namespace Kernel
 			m_idle_ns += SystemTimer::get().ns_since_boot() - m_idle_start_ns;
 		else
 		{
+			m_current->thread->set_cpu_time_stop();
+
 			switch (m_current->thread->state())
 			{
 				case Thread::State::Terminated:
@@ -203,10 +205,9 @@ namespace Kernel
 			page_table.load();
 
 		if (thread->state() == Thread::State::NotStarted)
-		{
 			thread->m_state = Thread::State::Executing;
-			thread->set_cpu_time_start();
-		}
+
+		thread->set_cpu_time_start();
 
 		if (thread->is_userspace())
 		{
@@ -271,6 +272,8 @@ namespace Kernel
 
 	void Scheduler::on_yield(YieldRegisters* yield_registers)
 	{
+		Processor::update_load_stats(is_idle());
+
 		reschedule(yield_registers);
 		m_next_reschedule_ns = !is_idle()
 			? SystemTimer::get().ns_since_boot() + s_reschedule_interval_ns
@@ -281,6 +284,8 @@ namespace Kernel
 	void Scheduler::on_timer_interrupt()
 	{
 		ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
+
+		Processor::update_load_stats(is_idle());
 
 		if (Processor::is_smp_enabled())
 			do_load_balancing();
