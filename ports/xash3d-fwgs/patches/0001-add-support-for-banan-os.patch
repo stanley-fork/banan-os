@@ -4,37 +4,14 @@ Date: Tue, 13 Jan 2026 20:49:19 +0200
 Subject: [PATCH] add support for banan-os
 
 ---
- engine/common/net_http.c    | 4 +++-
  engine/common/net_ws.c      | 6 ++++++
  engine/common/whereami.c    | 2 +-
  engine/platform/posix/net.h | 4 ++++
  public/build.c              | 2 ++
  public/build.h              | 3 +++
  public/buildenums.h         | 3 +++
- 7 files changed, 22 insertions(+), 2 deletions(-)
+ 6 files changed, 18 insertions(+), 2 deletions(-)
 
-diff --git a/engine/common/net_http.c b/engine/common/net_http.c
-index ff6fd41b..ebb5bbad 100644
---- a/engine/common/net_http.c
-+++ b/engine/common/net_http.c
-@@ -261,14 +261,16 @@ static int HTTP_FileCreateSocket( httpfile_t *file )
- 		return 0;
- 	}
- 
-+#if !XASH_BANAN_OS
- 	if( ioctlsocket( file->socket, FIONBIO, (void *)&mode ) < 0 )
- 	{
- 		Con_Printf( S_ERROR "%s: ioctl() returned %s\n", __func__, NET_ErrorString());
- 		HTTP_FreeFile( file, true );
- 		return 0;
- 	}
-+#endif
- 
--#if XASH_LINUX
-+#if XASH_LINUX || XASH_BANAN_OS
- 
- 	res = fcntl( file->socket, F_GETFL, 0 );
- 
 diff --git a/engine/common/net_ws.c b/engine/common/net_ws.c
 index 7ee4cba0..b44d5cf1 100644
 --- a/engine/common/net_ws.c

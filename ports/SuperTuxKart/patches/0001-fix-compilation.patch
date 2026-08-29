@@ -20,17 +20,6 @@
  
  static char *dns_strsep(char **sp, const char *delim) {
  	char *p;
---- SuperTuxKart-1.5/lib/angelscript/source/as_memory.cpp	2025-10-20 00:04:17.000000000 +0300
-+++ SuperTuxKart-1.5-x86_64/lib/angelscript/source/as_memory.cpp	2025-11-12 00:50:56.714916907 +0200
-@@ -38,7 +38,7 @@
- 
- #include <stdlib.h>
- 
--#if !defined(__APPLE__) && !defined(__SNC__) && !defined(__ghs__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
-+#if !defined(__APPLE__) && !defined(__SNC__) && !defined(__ghs__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__) && !defined(__banan_os__)
- #include <malloc.h>
- #endif
- 
 --- SuperTuxKart-1.5/src/network/socket_address.cpp	2025-10-20 00:04:17.000000000 +0300
 +++ SuperTuxKart-1.5-x86_64/src/network/socket_address.cpp	2025-11-12 01:26:24.915651489 +0200
 @@ -101,11 +101,7 @@

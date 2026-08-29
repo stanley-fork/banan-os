@@ -10,14 +10,3 @@
  #include <pthread.h>
  #endif
  #include <string.h>
-@@ -306,8 +308,10 @@
-     pthread_mutex_lock(&api.mutex);
-     if (!*handle) {
-         int flags = RTLD_LAZY | RTLD_LOCAL;
-+#ifdef RTLD_NOLOAD
-         if (!load)
-             flags |= RTLD_NOLOAD;
-+#endif
- 
-         *handle = dlopen(lib_name, flags);
-         if (!*handle) {
