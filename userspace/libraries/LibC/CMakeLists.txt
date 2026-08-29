@@ -4,7 +4,7 @@ set(LIBC_SOURCES
 	complex.cpp
 	ctype.cpp
 	dirent.cpp
-	dlfcn.cpp
+	dynamic-loader.cpp
 	endian.cpp
 	environ.cpp
 	fcntl.cpp
@@ -77,21 +77,11 @@ set(LIBC_SOURCES
 )
 
 add_library(objlibc OBJECT ${LIBC_SOURCES})
+
 target_compile_definitions(objlibc PRIVATE __arch=${BANAN_ARCH} __is_libc)
 
 target_compile_options(objlibc PRIVATE -O2 -g -Wstack-usage=8192 -fno-exceptions -fno-rtti -fpic)
 target_compile_options(objlibc PUBLIC -Wall -Wextra -Werror -Wno-error=stack-usage=)
-
-function(add_crtx crtx)
-	add_custom_target(${crtx}
-		COMMAND ${CMAKE_CXX_COMPILER} -c -o ${CMAKE_INSTALL_LIBDIR}/${crtx}.o ${CMAKE_CURRENT_SOURCE_DIR}/arch/${BANAN_ARCH}/${crtx}.S
-	)
-	add_dependencies(objlibc ${crtx})
-endfunction()
-
-add_crtx(crt0)
-add_crtx(crti)
-add_crtx(crtn)
 
 banan_include_headers(objlibc ban)
 banan_include_headers(objlibc kernel)
@@ -105,8 +95,31 @@ add_library(libc-shared SHARED $<TARGET_OBJECTS:objlibc>)
 target_link_options(libc-static PRIVATE -nolibc -nostdlib++)
 target_link_options(libc-shared PRIVATE -nolibc -nostdlib++)
 
+set_target_properties(libc-static PROPERTIES OUTPUT_NAME libc)
+set_target_properties(libc-shared PROPERTIES OUTPUT_NAME libc)
+
+target_link_options(libc-shared PRIVATE LINKER:-e,_libc_entry LINKER:-z,text -static-libgcc)
+
+add_library(libc ALIAS libc-shared)
+
 install(TARGETS libc-static OPTIONAL)
 install(TARGETS libc-shared OPTIONAL)
+
+function(add_crtx crtx)
+	set(crt_out ${CMAKE_INSTALL_LIBDIR}/${crtx}.o)
+	set(crt_src ${CMAKE_CURRENT_SOURCE_DIR}/arch/${BANAN_ARCH}/${crtx}.S)
+	add_custom_command(
+		OUTPUT ${crt_out}
+		COMMAND ${CMAKE_C_COMPILER} -c -o ${crt_out} ${crt_src}
+		DEPENDS ${crt_src}
+	)
+	add_custom_target(${crtx} DEPENDS ${crt_out})
+	add_dependencies(objlibc ${crtx})
+endfunction()
+
+add_crtx(crt0)
+add_crtx(crti)
+add_crtx(crtn)
 
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.a\"  \"${CMAKE_INSTALL_LIBDIR}/libdl.a\")")
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.so\" \"${CMAKE_INSTALL_LIBDIR}/libdl.so\")")
@@ -114,14 +127,7 @@ install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.so\" \"${CMAKE_INSTALL_LIBDIR}/libm.so\")")
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.a\"  \"${CMAKE_INSTALL_LIBDIR}/libpthread.a\")")
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.so\" \"${CMAKE_INSTALL_LIBDIR}/libpthread.so\")")
-
-set_target_properties(libc-static PROPERTIES OUTPUT_NAME libc)
-set_target_properties(libc-shared PROPERTIES OUTPUT_NAME libc)
-
-# set SONAME as cmake doesn't set it for some reason??
-set_target_properties(libc-shared PROPERTIES LINK_FLAGS "-Wl,-soname,libc.so")
-
-add_library(libc ALIAS libc-shared)
+install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink \"libc.so\" \"${CMAKE_INSTALL_LIBDIR}/DynamicLoader.so\")")
 
 execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libgcc_s.so OUTPUT_VARIABLE LIBGCC_S_LINK OUTPUT_STRIP_TRAILING_WHITESPACE)
 file(REAL_PATH ${LIBGCC_S_LINK} LIBGCC_S)

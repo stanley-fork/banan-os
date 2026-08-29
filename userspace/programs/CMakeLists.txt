@@ -13,7 +13,6 @@ set(USERSPACE_PROGRAMS
 	dd
 	dhcp-client
 	dirname
-	DynamicLoader
 	echo
 	env
 	false
