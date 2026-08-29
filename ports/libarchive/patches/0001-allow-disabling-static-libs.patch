@@ -1,0 +1,93 @@
+diff -ruN libarchive-3.8.6/CMakeLists.txt libarchive-3.8.6-banan_os/CMakeLists.txt
+--- libarchive-3.8.6/CMakeLists.txt	2026-01-05 12:30:22.000000000 +0200
++++ libarchive-3.8.6-banan_os/CMakeLists.txt	2026-08-29 07:11:47.418868705 +0300
+@@ -219,6 +219,7 @@
+ include(CTest)
+ 
+ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
++option(BUILD_STATIC_LIBS "Build static libraries" ON)
+ 
+ OPTION(ENABLE_MBEDTLS "Enable use of mbed TLS" OFF)
+ OPTION(ENABLE_NETTLE "Enable use of Nettle" OFF)
+@@ -240,18 +241,24 @@
+ # CNG is used for encrypt/decrypt Zip archives on Windows.
+ OPTION(ENABLE_CNG "Enable the use of CNG(Crypto Next Generation)" ON)
+ 
++IF(BUILD_STATIC_LIBS)
++	SET(ENABLE_SHARED_DEFAULT OFF)
++ELSE(BUILD_STATIC_LIBS)
++	SET(ENABLE_SHARED_DEFAULT ON)
++ENDIF(BUILD_STATIC_LIBS)
++
+ OPTION(ENABLE_TAR "Enable tar building" ON)
+-OPTION(ENABLE_TAR_SHARED "Enable dynamic build of tar" FALSE)
++OPTION(ENABLE_TAR_SHARED "Enable dynamic build of tar" ${ENABLE_SHARED_DEFAULT})
+ OPTION(ENABLE_CPIO "Enable cpio building" ON)
+-OPTION(ENABLE_CPIO_SHARED "Enable dynamic build of cpio" FALSE)
++OPTION(ENABLE_CPIO_SHARED "Enable dynamic build of cpio" ${ENABLE_SHARED_DEFAULT})
+ OPTION(ENABLE_CAT "Enable cat building" ON)
+-OPTION(ENABLE_CAT_SHARED "Enable dynamic build of cat" FALSE)
++OPTION(ENABLE_CAT_SHARED "Enable dynamic build of cat" ${ENABLE_SHARED_DEFAULT})
+ IF(WIN32 AND NOT CYGWIN)
+ 	SET(ENABLE_UNZIP FALSE)
+ 	SET(ENABLE_UNZIP_SHARED FALSE)
+ ELSE()
+ 	OPTION(ENABLE_UNZIP "Enable unzip building" ON)
+-	OPTION(ENABLE_UNZIP_SHARED "Enable dynamic build of unzip" FALSE)
++	OPTION(ENABLE_UNZIP_SHARED "Enable dynamic build of unzip" ${ENABLE_SHARED_DEFAULT})
+ ENDIF()
+ OPTION(ENABLE_XATTR "Enable extended attribute support" ON)
+ OPTION(ENABLE_ACL "Enable ACL support" ON)
+diff -ruN libarchive-3.8.6/libarchive/CMakeLists.txt libarchive-3.8.6-banan_os/libarchive/CMakeLists.txt
+--- libarchive-3.8.6/libarchive/CMakeLists.txt	2025-11-18 00:04:25.000000000 +0200
++++ libarchive-3.8.6-banan_os/libarchive/CMakeLists.txt	2026-08-29 07:11:56.172623769 +0300
+@@ -260,18 +260,20 @@
+ ENDIF(BUILD_SHARED_LIBS)
+ 
+ # archive_static is a static library
+-ADD_LIBRARY(archive_static STATIC ${libarchive_SOURCES} ${include_HEADERS})
+-TARGET_INCLUDE_DIRECTORIES(archive_static PUBLIC .)
+-TARGET_LINK_LIBRARIES(archive_static ${ADDITIONAL_LIBS})
+-SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
+-  LIBARCHIVE_STATIC)
+-IF(WIN32 AND MSVC AND MSVC_USE_STATIC_CRT)
+-  SET_PROPERTY(TARGET archive_static PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+-ENDIF(WIN32 AND MSVC AND MSVC_USE_STATIC_CRT)
+-# On Posix systems, libarchive.so and libarchive.a can co-exist.
+-IF(NOT WIN32 OR CYGWIN OR NOT BUILD_SHARED_LIBS)
+-  SET_TARGET_PROPERTIES(archive_static PROPERTIES OUTPUT_NAME archive)
+-ENDIF(NOT WIN32 OR CYGWIN OR NOT BUILD_SHARED_LIBS)
++IF(BUILD_STATIC_LIBS)
++  ADD_LIBRARY(archive_static STATIC ${libarchive_SOURCES} ${include_HEADERS})
++  TARGET_INCLUDE_DIRECTORIES(archive_static PUBLIC .)
++  TARGET_LINK_LIBRARIES(archive_static ${ADDITIONAL_LIBS})
++  SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
++    LIBARCHIVE_STATIC)
++  IF(WIN32 AND MSVC AND MSVC_USE_STATIC_CRT)
++    SET_PROPERTY(TARGET archive_static PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++  ENDIF(WIN32 AND MSVC AND MSVC_USE_STATIC_CRT)
++  # On Posix systems, libarchive.so and libarchive.a can co-exist.
++  IF(NOT WIN32 OR CYGWIN OR NOT BUILD_SHARED_LIBS)
++    SET_TARGET_PROPERTIES(archive_static PROPERTIES OUTPUT_NAME archive)
++  ENDIF(NOT WIN32 OR CYGWIN OR NOT BUILD_SHARED_LIBS)
++ENDIF(BUILD_STATIC_LIBS)
+ 
+ IF(ENABLE_INSTALL)
+   # How to install the libraries
+@@ -281,10 +283,12 @@
+             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+   ENDIF(BUILD_SHARED_LIBS)
+-  INSTALL(TARGETS archive_static
+-          RUNTIME DESTINATION bin
+-          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+-          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
++  IF(BUILD_STATIC_LIBS)
++    INSTALL(TARGETS archive_static
++            RUNTIME DESTINATION bin
++            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
++  ENDIF(BUILD_STATIC_LIBS)
+   INSTALL_MAN(${libarchive_MANS})
+   INSTALL(FILES ${include_HEADERS} DESTINATION include)
+ ENDIF()

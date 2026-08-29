@@ -1,6 +1,6 @@
-diff -ruN libuv-v1.51.0/include/uv/unix.h libuv-1.51.0-x86_64/include/uv/unix.h
---- libuv-v1.51.0/include/uv/unix.h     2025-04-25 12:50:27.000000000 +0300
-+++ libuv-1.51.0-x86_64/include/uv/unix.h       2025-07-28 14:06:18.220856588 +0300
+diff -ruN libuv-1.51.0/include/uv/unix.h libuv-1.51.0-banan_os/include/uv/unix.h
+--- libuv-1.51.0/include/uv/unix.h	2026-08-29 07:37:23.979001038 +0300
++++ libuv-1.51.0-banan_os/include/uv/unix.h	2026-08-29 07:38:25.325894730 +0300
 @@ -66,7 +66,8 @@
        defined(__MSYS__)   || \
        defined(__HAIKU__)  || \
@@ -11,10 +11,10 @@ diff -ruN libuv-v1.51.0/include/uv/unix.h libuv-1.51.0-x86_64/include/uv/unix.h
  # include "uv/posix.h"
  #endif
  
-diff -ruN libuv-v1.51.0/CMakeLists.txt libuv-1.51.0-x86_64/CMakeLists.txt
---- libuv-v1.51.0/CMakeLists.txt        2025-04-25 12:50:27.000000000 +0300
-+++ libuv-1.51.0-x86_64/CMakeLists.txt  2025-07-28 13:57:21.518563402 +0300
-@@ -283,6 +283,15 @@
+diff -ruN libuv-1.51.0/CMakeLists.txt libuv-1.51.0-banan_os/CMakeLists.txt
+--- libuv-1.51.0/CMakeLists.txt	2026-08-29 07:37:23.979001038 +0300
++++ libuv-1.51.0-banan_os/CMakeLists.txt	2026-08-29 07:38:25.325894730 +0300
+@@ -284,6 +284,15 @@
    list(APPEND uv_sources src/unix/proctitle.c)
  endif()
  

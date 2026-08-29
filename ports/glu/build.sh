@@ -7,6 +7,7 @@ DEPENDENCIES=('mesa')
 CONFIGURE_OPTIONS=(
 	'-Dprefix=/usr'
 	'-Dbuildtype=release'
+	'-Ddefault_library=shared'
 	'-Dgl_provider=osmesa'
 )
 

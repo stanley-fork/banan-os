@@ -10,9 +10,14 @@ CONFIGURE_OPTIONS=(
 	'-Dbash-completion=false'
 	'-Dgir=false'
 	'-Dman=false'
+	'-Dinstall-docs=false'
 	'-Dstemming=false'
 	'-Dsystemd=false'
 )
+
+pre_configure() {
+	echo '' > tests/meson.build
+}
 
 configure() {
 	meson setup \

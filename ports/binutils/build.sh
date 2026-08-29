@@ -11,6 +11,7 @@ CONFIGURE_OPTIONS=(
 	"--with-build-sysroot=$BANAN_SYSROOT"
 	'--enable-initfini-array'
 	'--enable-shared'
+	'--disable-static'
 	'--enable-lto'
 	'--disable-nls'
 	'--disable-werror'

@@ -8,4 +8,5 @@ CONFIG_SUB=('build-aux/config.sub')
 CONFIGURE_OPTIONS=(
 	"--target=$BANAN_TOOLCHAIN_TRIPLE"
 	"--with-sysroot=$BANAN_SYSROOT"
+	'--disable-static'
 )

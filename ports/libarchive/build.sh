@@ -6,18 +6,19 @@ DOWNLOAD_URL="https://github.com/libarchive/libarchive/releases/download/v$VERSI
 DEPENDENCIES=('zlib' 'zstd' 'bzip2' 'xz')
 
 configure() {
-	cmake --fresh -B build -S . -G Ninja  \
+	cmake --fresh -B _build -S . -G Ninja  \
 		--toolchain="$BANAN_TOOLCHAIN_DIR/Toolchain.txt" \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_STATIC_LIBS=OFF \
 		-DENABLE_TEST=OFF \
 		|| exit 1
 }
 
 build() {
-	cmake --build build || exit 1
+	cmake --build _build || exit 1
 }
 
 install() {
-	DESTDIR="$DESTDIR" cmake --install build || exit 1
+	DESTDIR="$DESTDIR" cmake --install _build || exit 1
 }

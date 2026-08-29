@@ -9,9 +9,13 @@ configure() {
 }
 
 build() {
-	make -j$(nproc) PLAT=posix CC="$CC" LIBS='$(SYSLIBS) $(MYLIBS)' || exit 1
+	make -j$(nproc) posix CC="$CC" MYCFLAGS='-fPIC' || exit 1
 }
 
 install() {
-	make install PLAT=posix INSTALL_TOP="$DESTDIR/usr" || exit 1
+	make install \
+		INSTALL_DATA='cp -d' \
+		INSTALL_TOP="$DESTDIR/usr" \
+		TO_LIB="liblua.so liblua.so.${VERSION%.*} liblua.so.$VERSION" \
+		|| exit 1
 }

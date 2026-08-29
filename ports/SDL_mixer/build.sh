@@ -6,3 +6,7 @@ DOWNLOAD_URL="https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/release-
 TAR_CONTENT="SDL_mixer-release-$VERSION"
 CONFIG_SUB=('build-scripts/config.sub')
 DEPENDENCIES=('libmikmod' 'libiconv' 'sdl12-compat')
+CONFIGURE_OPTIONS=(
+	'--disable-static'
+	"ac_cv_path_LIBMIKMOD_CONFIG=$BANAN_SYSROOT/usr/bin/libmikmod-config"
+)

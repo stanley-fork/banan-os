@@ -1,0 +1,88 @@
+diff -ruN libuv-1.51.0/CMakeLists.txt libuv-1.51.0-banan_os/CMakeLists.txt
+--- libuv-1.51.0/CMakeLists.txt	2025-04-25 12:50:27.000000000 +0300
++++ libuv-1.51.0-banan_os/CMakeLists.txt	2026-08-29 07:37:23.979001038 +0300
+@@ -25,6 +25,7 @@
+ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ 
+ option(LIBUV_BUILD_SHARED "Build shared lib" ON)
++option(LIBUV_BUILD_STATIC "Build static lib" ON)
+ 
+ cmake_dependent_option(LIBUV_BUILD_TESTS
+   "Build the unit tests when BUILD_TESTING is enabled and we are the root project" ON
+@@ -474,23 +475,25 @@
+   set_target_properties(uv PROPERTIES OUTPUT_NAME "uv")
+ endif()
+ 
+-add_library(uv_a STATIC ${uv_sources})
+-target_compile_definitions(uv_a PRIVATE ${uv_defines})
+-target_compile_options(uv_a PRIVATE ${uv_cflags})
+-target_include_directories(uv_a
+-  PUBLIC
+-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+-  PRIVATE
+-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
+-if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
+-  target_include_directories(uv_a PUBLIC $<BUILD_INTERFACE:${ZOSLIB_DIR}/include>)
+-  set_target_properties(uv_a PROPERTIES LINKER_LANGUAGE CXX)
+-endif()
+-target_link_libraries(uv_a ${uv_libraries})
+-set_target_properties(uv_a PROPERTIES OUTPUT_NAME "uv")
+-if(WIN32)
+-  set_target_properties(uv_a PROPERTIES PREFIX "lib")
++if(LIBUV_BUILD_STATIC)
++  add_library(uv_a STATIC ${uv_sources})
++  target_compile_definitions(uv_a PRIVATE ${uv_defines})
++  target_compile_options(uv_a PRIVATE ${uv_cflags})
++  target_include_directories(uv_a
++    PUBLIC
++      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
++      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
++    PRIVATE
++      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
++  if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
++    target_include_directories(uv_a PUBLIC $<BUILD_INTERFACE:${ZOSLIB_DIR}/include>)
++    set_target_properties(uv_a PROPERTIES LINKER_LANGUAGE CXX)
++  endif()
++  target_link_libraries(uv_a ${uv_libraries})
++  set_target_properties(uv_a PROPERTIES OUTPUT_NAME "uv")
++  if(WIN32)
++    set_target_properties(uv_a PROPERTIES PREFIX "lib")
++  endif()
+ endif()
+ 
+ if(LIBUV_BUILD_TESTS)
+@@ -762,15 +765,19 @@
+ set(includedir ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR})
+ set(libdir ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
+ set(prefix ${CMAKE_INSTALL_PREFIX})
+-configure_file(libuv-static.pc.in libuv-static.pc @ONLY)
+ 
+ install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+ install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+ install(FILES LICENSE-extra DESTINATION ${CMAKE_INSTALL_DOCDIR})
+-install(FILES ${PROJECT_BINARY_DIR}/libuv-static.pc
+-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+-install(TARGETS uv_a EXPORT libuvConfig
+-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
++
++if(LIBUV_BUILD_STATIC)
++  configure_file(libuv-static.pc.in libuv-static.pc @ONLY)
++  install(FILES ${PROJECT_BINARY_DIR}/libuv-static.pc
++          DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
++  install(TARGETS uv_a EXPORT libuvConfig
++          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
++endif()
++
+ install(EXPORT libuvConfig
+ 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libuv
+ 	NAMESPACE libuv::)
+@@ -799,7 +806,7 @@
+   endif()
+ endif()
+ 
+-if(BUILD_SHARED_LIBS)
++if(LIBUV_BUILD_SHARED)
+   set(LIB_SELECTED uv)
+ else()
+   set(LIB_SELECTED uv_a)

@@ -10,6 +10,9 @@ CONFIGURE_OPTIONS=(
 	'--enable-pc-files'
 	'--enable-sigwinch'
 	'--with-shared'
+	'--with-cxx-shared'
+	'--without-normal'
+	'--without-debug'
 	'--without-tests'
 	'--without-ada'
 	'--without-manpages'
@@ -21,7 +24,7 @@ pre_configure() {
 }
 
 post_install() {
-	for lib in ncurses form panel menu; do
+	for lib in ncurses ncurses++ form panel menu; do
 		ln -svf ${lib}w.pc "$DESTDIR/usr/lib/pkgconfig/$lib.pc"
 	done
 

@@ -10,7 +10,7 @@ configure() {
 		--toolchain="$BANAN_TOOLCHAIN_DIR/Toolchain.txt" \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_BUILD_TYPE=Release \
-		-DPHYSFS_BUILD_TEST=ON \
+		-DPHYSFS_BUILD_STATIC=OFF \
 		-DPHYSFS_BUILD_DOCS=OFF \
 		|| exit 1
 }

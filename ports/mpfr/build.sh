@@ -8,4 +8,5 @@ CONFIG_SUB=('config.sub')
 CONFIGURE_OPTIONS=(
 	"--target=$BANAN_TOOLCHAIN_TRIPLE"
 	'--with-sysroot=/'
+	'--disable-static'
 )

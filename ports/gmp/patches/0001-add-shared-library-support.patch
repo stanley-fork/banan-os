@@ -1,7 +1,7 @@
-diff -ruN libiconv-1.18/configure libiconv-1.18-banan_os/configure
---- libiconv-1.18/configure	2024-12-15 13:57:14.000000000 +0200
-+++ libiconv-1.18-banan_os/configure	2026-08-29 07:15:00.644124554 +0300
-@@ -8779,6 +8779,10 @@
+diff -ruN gmp-6.3.0/configure gmp-6.3.0-banan_os/configure
+--- gmp-6.3.0/configure	2023-07-29 16:42:22.000000000 +0300
++++ gmp-6.3.0-banan_os/configure	2026-08-29 06:12:23.202355223 +0300
+@@ -13032,6 +13032,10 @@
    lt_cv_deplibs_check_method=pass_all
    ;;
  
@@ -12,7 +12,7 @@ diff -ruN libiconv-1.18/configure libiconv-1.18-banan_os/configure
  beos*)
    lt_cv_deplibs_check_method=pass_all
    ;;
-@@ -14510,6 +14514,16 @@
+@@ -18341,6 +18345,16 @@
    esac
    ;;
  
@@ -29,21 +29,7 @@ diff -ruN libiconv-1.18/configure libiconv-1.18-banan_os/configure
  beos*)
    library_names_spec='$libname$shared_ext'
    dynamic_linker="$host_os ld.so"
-diff -ruN libiconv-1.18/libcharset/configure libiconv-1.18-banan_os/libcharset/configure
---- libiconv-1.18/libcharset/configure	2024-12-15 13:57:19.000000000 +0200
-+++ libiconv-1.18-banan_os/libcharset/configure	2026-08-29 07:15:30.603753153 +0300
-@@ -5418,6 +5418,10 @@
-   lt_cv_deplibs_check_method=pass_all
-   ;;
- 
-+banan_os*)
-+  lt_cv_deplibs_check_method=pass_all
-+  ;;
-+
- beos*)
-   lt_cv_deplibs_check_method=pass_all
-   ;;
-@@ -11302,6 +11306,16 @@
+@@ -22305,6 +22319,16 @@
    esac
    ;;
  

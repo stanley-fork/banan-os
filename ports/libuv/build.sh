@@ -6,17 +6,18 @@ DOWNLOAD_URL="https://dist.libuv.org/dist/v$VERSION/libuv-v$VERSION.tar.gz#5f055
 TAR_CONTENT="libuv-v$VERSION"
 
 configure() {
-	cmake --fresh -B build -S . -G Ninja \
+	cmake --fresh -B _build -S . -G Ninja \
 		--toolchain="$BANAN_TOOLCHAIN_DIR/Toolchain.txt" \
 		-DCMAKE_INSTALL_PREFIX=/usr \
-		-DBUILD_TESTING=OFF \
+		-DLIBUV_BUILD_STATIC=OFF \
+		-DLIBUV_BUILD_TESTS=OFF \
 		. || exit 1
 }
 
 build() {
-	cmake --build build || exit 1
+	cmake --build _build || exit 1
 }
 
 install() {
-	DESTDIR="$DESTDIR" cmake --install build || exit 1
+	DESTDIR="$DESTDIR" cmake --install _build || exit 1
 }

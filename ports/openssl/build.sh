@@ -3,14 +3,19 @@
 NAME='openssl'
 VERSION='3.6.0'
 DOWNLOAD_URL="https://github.com/openssl/openssl/releases/download/openssl-$VERSION/openssl-$VERSION.tar.gz#b6a5f44b7eb69e3fa35dbf15524405b44837a481d43d81daddde3ff21fcbb8e9"
-DEPENDENCIES=('ca-certificates' 'zlib')
+DEPENDENCIES=('ca-certificates' 'zlib' 'zstd')
 MAKE_INSTALL_TARGETS=('install_sw' 'install_ssldirs')
 
 configure() {
-	./Configure --prefix=/usr --openssldir=/etc/ssl -DOPENSSL_USE_IPV6=0 no-asm no-tests banan_os-generic threads zlib
+	./Configure --prefix=/usr --openssldir=/etc/ssl -DOPENSSL_USE_IPV6=0 \
+		no-docs no-tests shared enable-zlib enable-zstd threads banan_os-generic
 }
 
 post_install() {
+	rm -f "$DESTDIR/usr/lib/libcrypto.a" "$DESTDIR/usr/lib/libssl.a"
+
+	chmod 0700 "$DESTDIR/etc/ssl/private"
+
 	rm -f "$DESTDIR/etc/ssl/certs"/*
 
 	ln -svf "../cacert/cacert.pem" "$DESTDIR/etc/ssl/cert.pem"

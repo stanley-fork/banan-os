@@ -9,6 +9,7 @@ CONFIG_SUB=('config.sub')
 CONFIGURE_OPTIONS=(
 	"--build=$(uname -m)-pc-linux-gnu"
 	'--with-build-python=python3.14'
+	'--with-ensurepip=install'
 	'--disable-ipv6'
 	'--enable-shared'
 	'--disable-test-modules'
