@@ -1,0 +1,16 @@
+diff -ruN mpv-0.41.0/osdep/threads-posix.h mpv-0.41.0-banan_os/osdep/threads-posix.h
+--- mpv-0.41.0/osdep/threads-posix.h	2025-12-21 21:08:20.000000000 +0200
++++ mpv-0.41.0-banan_os/osdep/threads-posix.h	2026-08-16 22:08:57.334649008 +0300
+@@ -232,7 +232,11 @@
+ 
+ static inline int64_t mp_thread_cpu_time_ns(mp_thread_id thread)
+ {
+-#if defined(_POSIX_TIMERS) && _POSIX_TIMERS > 0 && defined(_POSIX_THREAD_CPUTIME)
++#if defined(__banan_os__)
++    struct timespec ts;
++    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
++        return MP_TIME_S_TO_NS(ts.tv_sec) + ts.tv_nsec;
++#elif defined(_POSIX_TIMERS) && _POSIX_TIMERS > 0 && defined(_POSIX_THREAD_CPUTIME)
+     clockid_t id;
+     struct timespec ts;
+     if (pthread_getcpuclockid(thread, &id) == 0 && clock_gettime(id, &ts) == 0)

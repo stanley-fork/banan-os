@@ -1,0 +1,11 @@
+diff -ruN mpv-0.41.0/video/out/filter_kernels.c mpv-0.41.0-banan_os/video/out/filter_kernels.c
+--- mpv-0.41.0/video/out/filter_kernels.c	2025-12-21 21:08:20.000000000 +0200
++++ mpv-0.41.0-banan_os/video/out/filter_kernels.c	2026-08-16 22:08:57.358109314 +0300
+@@ -319,6 +319,7 @@
+     if (fabs(x) < 1e-8)
+         return 1.0;
+     x *= M_PI;
++    __builtin_trap();
+     return 2.0 * j1(x) / x;
+ }
+ 
