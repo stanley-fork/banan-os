@@ -1,0 +1,12 @@
+diff -ruN libass-0.17.5/meson.build libass-0.17.5-banan_os/meson.build
+--- libass-0.17.5/meson.build	2026-06-24 03:47:26.000000000 +0300
++++ libass-0.17.5-banan_os/meson.build	2026-08-16 22:59:12.418482529 +0300
+@@ -298,7 +298,7 @@
+                 endif
+             elif host_system == 'darwin'
+                 nasm_args += ['-DPREFIX', '-DSTACK_ALIGNMENT=16']
+-            elif host_system in ['linux', 'sunos', 'haiku', 'gnu', 'android']
++            elif host_system in ['linux', 'sunos', 'haiku', 'gnu', 'android', 'banan_os']
+                 nasm_args += ['-DSTACK_ALIGNMENT=16']
+             elif host_system == 'dragonfly' or host_system.endswith('bsd')
+                 nasm_args += []
