@@ -20,6 +20,7 @@ fi
 
 PACKAGE_ROOT="$BANAN_PORT_DIR/package"
 PACKAGE_REPO="$PACKAGE_ROOT/repo"
+REMOTE_PACKAGE_REPO="https://packages.bananymous.com/banan-os"
 
 export PATH="$BANAN_TOOLCHAIN_PREFIX/bin:$PATH"
 
@@ -151,6 +152,19 @@ pushd "$BANAN_ROOT_DIR" >/dev/null
 popd >/dev/null
 
 for dependency in "${DEPENDENCIES[@]}"; do
+	if [ -z "$NO_XBPS_DEPS" ]; then
+		if run_xbps xbps-install \
+			-R "$PACKAGE_REPO" \
+			-R "$REMOTE_PACKAGE_REPO" \
+			-r "$BANAN_SYSROOT" \
+			-Siy "$dependency"
+		then
+			version_string="$(../get-version-string.sh)"
+			echo "${version_string%%_*}" >> "$installed_file"
+			continue
+		fi
+	fi
+
 	if [ ! -d "../$dependency" ]; then
 		echo "Could not find dependency '$dependency' or port '$NAME'"
 		exit 1
@@ -159,18 +173,11 @@ for dependency in "${DEPENDENCIES[@]}"; do
 	pushd "../$dependency" >/dev/null
 	pwd
 
-	version_string="$(../get-version-string.sh)"
-	if [ -f "$PACKAGE_REPO/$version_string.xbps" ]; then
-		run_xbps xbps-install \
-			-r "$BANAN_SYSROOT" \
-			-R "$PACKAGE_REPO" \
-			-y "$dependency" \
-		 || exit 1
-		echo "${version_string%%_*}" >> "$installed_file"
-	elif ! ./build.sh; then
+	if ! ./build.sh; then
 		echo "Failed to install dependency '$dependency' of port '$NAME'"
 		exit 1
 	fi
+
 	popd >/dev/null
 done
 
