@@ -6,21 +6,31 @@ fi
 
 source "$BANAN_ROOT_DIR/script/config.sh"
 
+export BANAN_XBPS_REPO="$BANAN_PORT_DIR/package/repo"
+
+set -u
+
 package_standalone() {
-	pushd "$BANAN_PORT_DIR/$1" >/dev/null
-
 	local version_string="$(../get-version-string.sh)"
-	if [ ! -f "$BANAN_PORT_DIR/package/repo/${version_string}.xbps" ]; then
-		local dependency
-		for dependency in $(source build.sh; echo ${DEPENDENCIES[*]}); do
-			package_standalone "$dependency"
-		done
 
-		find "$BANAN_SYSROOT/usr/lib" \( -type f -o -type l \) -delete
-		PACKAGE=1 ./build.sh || echo "$port_name" >> ../failed-ports
+	local xbps_file="$BANAN_XBPS_REPO/${version_string}.xbps"
+	if [[ -f "$xbps_file" ]]; then
+		[[ 'build.sh' -ot "$xbps_file" ]] && [[ ! -d 'patches' || -z "$(find patches -newer "$xbps_file" -quit)" ]] && return
+		rm "$xbps_file"
 	fi
 
-	popd >/dev/null
+	local dependency
+	for dependency in $(source build.sh; echo ${DEPENDENCIES[*]}); do
+		pushd "$BANAN_PORT_DIR/$dependency" >/dev/null
+		package_standalone
+		popd >/dev/null
+	done
+
+	rm -rf "$BANAN_BUILD_DIR"
+	rm -rf "$version_string"
+	rm -rf "$BANAN_PORT_DIR/package/$version_string"
+
+	PACKAGE=1 ./build.sh || echo "$version_string" >> ../failed-ports
 }
 
 cd "$BANAN_PORT_DIR"
@@ -29,5 +39,7 @@ for build_script in */build.sh; do
 
 	[[ "$port_name" == 'llvm' ]] && continue
 
-	package_standalone "$port_name"
+	pushd "$BANAN_PORT_DIR/$port_name" >/dev/null
+	package_standalone
+	popd >/dev/null
 done

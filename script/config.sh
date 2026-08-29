@@ -46,4 +46,7 @@ run_xbps() {
 	PATH="$BANAN_TOOLCHAIN_PREFIX/bin:$PATH" LD_LIBRARY_PATH="$BANAN_TOOLCHAIN_PREFIX/lib" "$@"
 }
 export -f run_xbps
-export BANAN_XBPS_REPO='https://packages.bananymous.com/banan-os'
+
+if [[ -z $BANAN_XBPS_REPO ]]; then
+	export BANAN_XBPS_REPO='https://packages.bananymous.com/banan-os'
+fi

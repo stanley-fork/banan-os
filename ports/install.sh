@@ -18,9 +18,8 @@ if [ -z $DONT_REMOVE_INSTALLED ]; then
 	rm -rf "$BANAN_SYSROOT/var/db/xbps"
 fi
 
-PACKAGE_ROOT="$BANAN_PORT_DIR/package"
-PACKAGE_REPO="$PACKAGE_ROOT/repo"
-REMOTE_PACKAGE_REPO="https://packages.bananymous.com/banan-os"
+LOCAL_PACKAGE_ROOT="$BANAN_PORT_DIR/package"
+LOCAL_PACKAGE_REPO="$LOCAL_PACKAGE_ROOT/repo"
 
 export PATH="$BANAN_TOOLCHAIN_PREFIX/bin:$PATH"
 
@@ -133,7 +132,7 @@ if [ -z $NAME ] || [ -z $VERSION ] || [ -z $DOWNLOAD_URL ]; then
 	exit 1
 fi
 
-build_dir="$NAME-$VERSION-$BANAN_ARCH"
+build_dir="$(../get-version-string.sh)"
 
 if [ ! -d "$build_dir" ]; then
 	rm -f '.compile_hash'
@@ -152,33 +151,26 @@ pushd "$BANAN_ROOT_DIR" >/dev/null
 popd >/dev/null
 
 for dependency in "${DEPENDENCIES[@]}"; do
-	if [ -z "$NO_XBPS_DEPS" ]; then
-		if run_xbps xbps-install \
-			-R "$PACKAGE_REPO" \
-			-R "$REMOTE_PACKAGE_REPO" \
-			-r "$BANAN_SYSROOT" \
-			-Siy "$dependency"
-		then
-			version_string="$(../get-version-string.sh)"
-			echo "${version_string%%_*}" >> "$installed_file"
-			continue
-		fi
-	fi
-
 	if [ ! -d "../$dependency" ]; then
 		echo "Could not find dependency '$dependency' or port '$NAME'"
 		exit 1
 	fi
 
-	pushd "../$dependency" >/dev/null
-	pwd
+	if [ -z "$NO_XBPS_DEPS" ]; then
+		if run_xbps xbps-install \
+			-R "$BANAN_XBPS_REPO" \
+			-r "$BANAN_SYSROOT" \
+			-Siy "$dependency"
+		then
+			(cd "../$dependency" && ../get-version-string.sh) >> "$installed_file"
+			continue
+		fi
+	fi
 
-	if ! ./build.sh; then
+	if ! (cd "../$dependency" && ./build.sh); then
 		echo "Failed to install dependency '$dependency' of port '$NAME'"
 		exit 1
 	fi
-
-	popd >/dev/null
 done
 
 if [ "$VERSION" = "git" ]; then
@@ -290,11 +282,11 @@ rm -f "$BANAN_SYSROOT/usr/share/info/dir"
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
 
 if (( $PACKAGE )); then
-	mkdir -p "$PACKAGE_ROOT"
+	mkdir -p "$LOCAL_PACKAGE_ROOT" || exit 1
 
 	version_string=$(cd .. && ../get-version-string.sh)
 
-	package_dir="$PACKAGE_ROOT/$version_string"
+	package_dir="$LOCAL_PACKAGE_ROOT/$version_string"
 
 	rm -rf "$package_dir"
 	mkdir "$package_dir"
@@ -313,8 +305,9 @@ if (( $PACKAGE )); then
 	test -d "$DESTDIR/usr/libexec" && find "$DESTDIR/usr/libexec" -name '*.la' -delete
 	rm -f "$DESTDIR/usr/share/info/dir"
 
-	mkdir -p "$PACKAGE_REPO"
-	cd "$PACKAGE_REPO"
+	mkdir -p "$LOCAL_PACKAGE_REPO" || exit 1
+	cd "$LOCAL_PACKAGE_REPO" || exit 1
+
 	run_xbps xbps-create -A "$BANAN_ARCH" -n "${version_string%.*}" -s "$DESCRIPTION" -D "$dependencies" "$package_dir"
 	run_xbps xbps-rindex -af "$version_string.xbps"
 fi
