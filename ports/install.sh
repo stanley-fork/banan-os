@@ -283,7 +283,8 @@ pre_install
 install
 post_install
 
-find "$BANAN_SYSROOT/usr/lib" -name '*.la' -delete
+test -d "$BANAN_SYSROOT/usr/lib"     && find "$BANAN_SYSROOT/usr/lib"     -name '*.la' -delete
+test -d "$BANAN_SYSROOT/usr/libexec" && find "$BANAN_SYSROOT/usr/libexec" -name '*.la' -delete
 rm -f "$BANAN_SYSROOT/usr/share/info/dir"
 
 grep -qsxF "$NAME-$VERSION" "$installed_file" || echo "$NAME-$VERSION" >> "$installed_file"
@@ -308,7 +309,8 @@ if (( $PACKAGE )); then
 	install
 	post_install
 
-	find "$DESTDIR/usr/lib" -name '*.la' -delete
+	test -d "$DESTDIR/usr/lib"     && find "$DESTDIR/usr/lib"     -name '*.la' -delete
+	test -d "$DESTDIR/usr/libexec" && find "$DESTDIR/usr/libexec" -name '*.la' -delete
 	rm -f "$DESTDIR/usr/share/info/dir"
 
 	mkdir -p "$PACKAGE_REPO"
