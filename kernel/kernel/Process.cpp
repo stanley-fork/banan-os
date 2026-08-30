@@ -2359,7 +2359,7 @@ namespace Kernel
 		if (flags & ~(EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE))
 			return BAN::Error::from_errno(EINVAL);
 
-		int oflags = 0;
+		int oflags = O_RDWR;
 		if (flags & EFD_CLOEXEC)
 			oflags |= O_CLOEXEC;
 		if (flags & EFD_NONBLOCK)
