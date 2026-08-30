@@ -22,22 +22,22 @@ static bool create_parents(const char* path, bool verbose)
 		buffer[i] = '\0';
 
 		struct stat st;
-		if (stat(path, &st) == 0)
+		if (stat(buffer, &st) == 0)
 		{
 			if (S_ISDIR(st.st_mode))
 				continue;
-			fprintf(stderr, "%s: cannot create '%s': %s\n", s_argv0, path, strerror(EEXIST));
+			fprintf(stderr, "%s: cannot create '%s': %s\n", s_argv0, buffer, strerror(EEXIST));
 			return false;
 		}
 
-		if (errno != ENOENT || mkdir(path, 0) == -1)
+		if (errno != ENOENT || mkdir(buffer, 0) == -1)
 		{
-			fprintf(stderr, "%s: cannot create '%s': %s\n", s_argv0, path, strerror(errno));
+			fprintf(stderr, "%s: cannot create '%s': %s\n", s_argv0, buffer, strerror(errno));
 			return false;
 		}
 
 		if (verbose)
-			printf("%s: created directory '%s'\n", s_argv0, path);
+			printf("%s: created directory '%s'\n", s_argv0, buffer);
 
 		const mode_t filemask = umask(0);
 		umask(filemask);
