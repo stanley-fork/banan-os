@@ -37,6 +37,7 @@ set(USERSPACE_PROGRAMS
 	poweroff
 	ProgramLauncher
 	pwd
+	realpath
 	resolver
 	rm
 	Shell
