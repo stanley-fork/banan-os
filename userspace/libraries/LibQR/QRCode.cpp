@@ -10,37 +10,68 @@ namespace LibQR
 
 	struct BitStream
 	{
-		BAN::ErrorOr<void> append(uint32_t value, size_t bits)
+		void append(uint32_t value, size_t bits)
 		{
-			for (size_t i = bits; i > 0; i--)
+			ASSERT(m_length + bits <= m_data.size() * 8);
+			ASSERT(bits <= 32);
+
+			while (bits > 0)
 			{
-				if ((length % 8) == 0)
-					TRY(data.emplace_back(0));
+				const size_t copy = BAN::Math::min(bits, 8 - m_length % 8);
+				const uint8_t mask = (1u << copy) - 1;
 
-				data.back() <<= 1;
-				if ((value >> (i - 1)) & 1)
-					data.back() |= 1;
+				m_data[m_length / 8] <<= copy;
+				m_data[m_length / 8] |= (value >> (bits - copy)) & mask;
 
-				length++;
+				m_length += copy;
+				bits -= copy;
 			}
+		}
 
-			return {};
+		void append_zeroes(size_t bits)
+		{
+			ASSERT(m_length + bits <= m_data.size() * 8);
+			if (const size_t rem = m_length % 8)
+				m_data[m_length / 8] <<= BAN::Math::min(bits, 8 - rem);
+			m_length += bits;
 		}
 
 		bool operator[](size_t index) const
 		{
-			ASSERT(index < length);
+			ASSERT(index < m_length);
 
 			const size_t byte = index / 8;
-			const size_t bit = index % 8;
+			const size_t bit  = index % 8;
 
-			const size_t bits = BAN::Math::min<size_t>(8, length - byte * 8);
+			if (byte == m_length / 8)
+				return (m_data[byte] & (1u << (m_length % 8 - bit - 1))) != 0;
 
-			return !!((data[byte] >> (bits - bit - 1)) & 1);
+			return (m_data[byte] & (0x80 >> bit)) != 0;
 		}
 
-		BAN::Vector<uint8_t> data;
-		size_t length { 0 };
+		BAN::ErrorOr<void> set_byte_capacity(size_t bytes)
+		{
+			TRY(m_data.resize(bytes, 0));
+			return {};
+		}
+
+		void set_data(BAN::Vector<uint8_t>&& data, size_t bits)
+		{
+			ASSERT(data.size() >= (bits + 7) / 8);
+			m_data = BAN::move(data);
+			m_length = bits;
+		}
+
+		BAN::ConstByteSpan data_span() const
+		{
+			return BAN::ConstByteSpan { m_data.data(), m_length / 8 };
+		}
+
+		size_t length() const { return m_length; }
+
+	private:
+		BAN::Vector<uint8_t> m_data;
+		size_t m_length { 0 };
 	};
 
 	struct GF256
@@ -386,35 +417,39 @@ namespace LibQR
 		if (qr_info.version == 0xFF)
 			return BAN::Error::from_errno(E2BIG);
 
+		auto ec_info = s_ec_block_info[qr_info.version - 1][static_cast<size_t>(qr_info.error_correction)];
+		const size_t max_bytes = ec_info[1] * ec_info[2] + ec_info[3] * ec_info[4];
+
+		TRY(qr_info.bits.set_byte_capacity(max_bytes));
+
 		// byte mode
-		TRY(qr_info.bits.append(0b0100, 4));
+		qr_info.bits.append(0b0100, 4);
 
 		// data length
-		TRY(qr_info.bits.append(data.size(), (qr_info.version <= 9) ? 8 : 16));
+		qr_info.bits.append(data.size(), (qr_info.version <= 9) ? 8 : 16);
 
 		// data
 		for (size_t i = 0; i < data.size(); i++)
-			TRY(qr_info.bits.append(data[i], 8));
+			qr_info.bits.append(data[i], 8);
 
-		auto ec_info = s_ec_block_info[qr_info.version - 1][static_cast<size_t>(qr_info.error_correction)];
-		const size_t max_bits = (ec_info[1] * ec_info[2] + ec_info[3] * ec_info[4]) * 8;
-		ASSERT(qr_info.bits.length <= max_bits);
+		const size_t max_bits = max_bytes * 8;
+		ASSERT(qr_info.bits.length() <= max_bits);
 
 		// terminator
-		if (const size_t missing = max_bits - qr_info.bits.length; missing < 4)
-			TRY(qr_info.bits.append(0, missing));
+		if (const size_t missing = max_bits - qr_info.bits.length(); missing < 4)
+			qr_info.bits.append_zeroes(missing);
 		else
-			TRY(qr_info.bits.append(0, 4));
+			qr_info.bits.append_zeroes(4);
 
 		// byte align
-		if (const size_t rem = qr_info.bits.length % 8)
-			TRY(qr_info.bits.append(0, 8 - rem));
+		if (const size_t rem = qr_info.bits.length() % 8)
+			qr_info.bits.append_zeroes(8 - rem);
 
 		// add pad bytes
-		for (bool toggle = true; qr_info.bits.length < max_bits; toggle = !toggle)
-			TRY(qr_info.bits.append(toggle ? 0b11101100 : 0b00010001, 8));
+		for (bool toggle = true; qr_info.bits.length() < max_bits; toggle = !toggle)
+			qr_info.bits.append(toggle ? 0b11101100 : 0b00010001, 8);
 
-		BAN::ConstByteSpan data_words = qr_info.bits.data.span();
+		auto data_words = qr_info.bits.data_span();
 
 		// break into data blocks for error correction
 		BAN::Vector<BAN::ConstByteSpan> data_blocks;
@@ -438,29 +473,33 @@ namespace LibQR
 		for (const auto& data_block : data_blocks)
 			TRY(ec_blocks.push_back(TRY(get_remainder(data_block, generator.span()))));
 
-		// interleave data and error blocks
-		BAN::Vector<uint8_t> interleaved;
-		TRY(interleaved.reserve(
-			ec_info[1] * (ec_info[2] + ec_info[0]) +
-			ec_info[3] * (ec_info[4] + ec_info[0])
-		));
-		for (size_t i = 0; i < ec_info[2]; i++)
-			for (size_t j = 0; j < ec_info[1] + ec_info[3]; j++)
-				MUST(interleaved.push_back(data_blocks[j][i]));
-		for (size_t j = 0; j < ec_info[3]; j++)
-			MUST(interleaved.push_back(data_blocks[ec_info[1] + j][ec_info[2]]));
-		for (size_t i = 0; i < ec_info[0]; i++)
-			for (size_t j = 0; j < ec_blocks.size(); j++)
-				MUST(interleaved.push_back(ec_blocks[j][i]));
-
-		// update returned info and append required remainder bits
-		qr_info.bits.data = BAN::move(interleaved);
-		qr_info.bits.length = qr_info.bits.data.size() * 8;
-
-		constexpr uint8_t remainer_bits[] {
+		constexpr uint8_t remainer_bits_lookup[] {
 			0, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0,
 		};
-		TRY(qr_info.bits.append(0, remainer_bits[qr_info.version - 1]));
+		const size_t remainder_bits = remainer_bits_lookup[qr_info.version - 1];
+
+		// interleave data and error blocks
+		BAN::Vector<uint8_t> interleaved;
+		TRY(interleaved.resize(
+			ec_info[1] * (ec_info[2] + ec_info[0]) +
+			ec_info[3] * (ec_info[4] + ec_info[0]) +
+			(remainder_bits > 0)
+		));
+
+		size_t byte_index = 0;
+		for (size_t i = 0; i < ec_info[2]; i++)
+			for (size_t j = 0; j < ec_info[1] + ec_info[3]; j++)
+				interleaved[byte_index++] = data_blocks[j][i];
+		for (size_t j = 0; j < ec_info[3]; j++)
+			interleaved[byte_index++] = data_blocks[ec_info[1] + j][ec_info[2]];
+		for (size_t i = 0; i < ec_info[0]; i++)
+			for (size_t j = 0; j < ec_blocks.size(); j++)
+				interleaved[byte_index++] = ec_blocks[j][i];
+		if (remainder_bits > 0)
+			interleaved[byte_index] = 0;
+
+		// update returned info with remainder bits
+		qr_info.bits.set_data(BAN::move(interleaved), byte_index * 8 + remainder_bits);
 
 		return qr_info;
 	}
@@ -765,7 +804,7 @@ namespace LibQR
 				}
 			}
 
-			ASSERT(index == qr_info.bits.length);
+			ASSERT(index == qr_info.bits.length());
 		}
 
 		const auto mod2_remainder =
