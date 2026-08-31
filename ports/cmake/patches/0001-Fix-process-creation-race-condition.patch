@@ -1,0 +1,13 @@
+diff -ruN cmake-3.26.6/Source/kwsys/ProcessUNIX.c cmake-3.26.6-banan_os/Source/kwsys/ProcessUNIX.c
+--- cmake-3.26.6/Source/kwsys/ProcessUNIX.c	2023-11-27 20:48:12.000000000 +0200
++++ cmake-3.26.6-banan_os/Source/kwsys/ProcessUNIX.c	2026-08-31 07:00:00.500907152 +0300
+@@ -1838,7 +1838,8 @@
+   /* Make sure the child is in the process group before we proceed.  This
+      avoids race conditions with calls to the kill function that we make for
+      signalling process groups.  */
+-  while ((readRes = read(pgidPipe[0], &tmp, 1)) > 0) {
++  while ((readRes = read(pgidPipe[0], &tmp, 1)) > 0 ||
++         (readRes < 0 && errno == EINTR)) {
+   }
+   if (readRes < 0) {
+     sigprocmask(SIG_SETMASK, &old_mask, 0);
