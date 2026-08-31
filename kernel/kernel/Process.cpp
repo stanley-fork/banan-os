@@ -417,6 +417,9 @@ namespace Kernel
 
 		m_open_file_descriptors.close_all();
 
+		m_root_file = {};
+		m_working_directory = {};
+
 		// NOTE: We must unmap ranges while the page table is still alive
 		m_mapped_regions.clear();
 
