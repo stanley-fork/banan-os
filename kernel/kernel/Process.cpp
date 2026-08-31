@@ -466,51 +466,58 @@ namespace Kernel
 			ASSERT_NOT_REACHED();
 		}
 
-		if (m_parent)
-		{
-			Process* parent_process = nullptr;
+		const auto notify_parent = [this, status, signal] {
+			Process* parent = nullptr;
 
 			for_each_process(
-				[&](Process& parent) -> BAN::Iteration
+				[&](Process& process) -> BAN::Iteration
 				{
-					if (parent.pid() != m_parent)
+					if (process.pid() != m_parent)
 						return BAN::Iteration::Continue;
-					parent_process = &parent;
+					parent = &process;
 					return BAN::Iteration::Break;
 				}
 			);
 
-			if (parent_process)
-			{
-				SpinLockGuard _(parent_process->m_child_wait_lock);
+			if (parent == nullptr || parent->m_threads.empty())
+				return;
 
-				for (auto& child : parent_process->m_child_wait_statuses)
+			{
+				SpinLockGuard _(parent->m_signal_lock);
+				if (parent->m_signal_handlers[SIGCHLD].sa_flags & SA_NOCLDWAIT)
+					return;
+				if (parent->m_signal_handlers[SIGCHLD].sa_handler == SIG_IGN)
+					return;
+			}
+
+			{
+				SpinLockGuard _(parent->m_child_wait_lock);
+				for (auto& child : parent->m_child_wait_statuses)
 				{
 					if (child.pid != pid())
 						continue;
-
 					child.status = __WGENEXITCODE(status, signal);
-
-					parent_process->add_pending_signal(SIGCHLD, {
-						.si_signo = SIGCHLD,
-						.si_code = signal ? CLD_KILLED : CLD_EXITED,
-						.si_errno = 0,
-						.si_pid = pid(),
-						.si_uid = m_credentials.ruid(),
-						.si_addr = nullptr,
-						.si_status = __WGENEXITCODE(status, signal),
-						.si_band = 0,
-						.si_value = {},
-					});
-					if (!parent_process->m_threads.empty())
-						Processor::scheduler().unblock_thread(parent_process->m_threads.front());
-
-					parent_process->m_child_wait_blocker.unblock();
-
+					parent->m_child_wait_blocker.unblock();
 					break;
 				}
 			}
-		}
+
+			parent->add_pending_signal(SIGCHLD, {
+				.si_signo = SIGCHLD,
+				.si_code = signal ? CLD_KILLED : CLD_EXITED,
+				.si_errno = 0,
+				.si_pid = pid(),
+				.si_uid = m_credentials.ruid(),
+				.si_addr = nullptr,
+				.si_status = __WGENEXITCODE(status, signal),
+				.si_band = 0,
+				.si_value = {},
+			});
+
+			Processor::scheduler().unblock_thread(parent->m_threads.front());
+		};
+
+		notify_parent();
 
 		{
 			LockGuard _(m_process_lock);
@@ -3084,7 +3091,13 @@ namespace Kernel
 
 	void Process::set_stopped(bool stopped, int signal)
 	{
-		SpinLockGuard _(m_signal_lock);
+		{
+			SpinLockGuard _(m_signal_lock);
+			if (m_stopped == stopped)
+				return;
+			m_stopped = stopped;
+			m_stop_blocker.unblock();
+		}
 
 		Process* parent = nullptr;
 
@@ -3098,46 +3111,56 @@ namespace Kernel
 			}
 		);
 
-		if (parent != nullptr)
+		if (parent == nullptr)
+			return;
+
+		bool notify_parent = true;
+		bool send_sigchld = true;
+
 		{
-			{
-				SpinLockGuard _(parent->m_child_wait_lock);
+			SpinLockGuard _(parent->m_signal_lock);
+			if (parent->m_signal_handlers[SIGCHLD].sa_flags & SA_NOCLDWAIT)
+				notify_parent = false;
+			if (parent->m_signal_handlers[SIGCHLD].sa_handler == SIG_IGN)
+				notify_parent = false;
+			if (parent->m_signal_handlers[SIGCHLD].sa_flags & SA_NOCLDSTOP)
+				send_sigchld = false;
+		}
 
-				for (auto& child : parent->m_child_wait_statuses)
-				{
-					if (child.pid != pid())
-						continue;
-					if (!child.status.has_value() || WIFCONTINUED(*child.status) || WIFSTOPPED(*child.status))
-						child.status = stopped
-							? __WGENSTOPCODE(signal)
-							: __WGENCONTCODE();
+		if (notify_parent)
+		{
+			SpinLockGuard _(parent->m_child_wait_lock);
+			for (auto& child : parent->m_child_wait_statuses)
+			{
+				if (child.pid != pid())
+					continue;
+				if (child.status.has_value() && !WIFCONTINUED(*child.status) && !WIFSTOPPED(*child.status))
 					break;
-				}
-
+				child.status = stopped
+					? __WGENSTOPCODE(signal)
+					: __WGENCONTCODE();
 				parent->m_child_wait_blocker.unblock();
-			}
-
-			if (!(m_signal_handlers[SIGCHLD].sa_flags & SA_NOCLDSTOP))
-			{
-				parent->add_pending_signal(SIGCHLD, {
-					.si_signo = SIGCHLD,
-					.si_code = stopped ? CLD_STOPPED : CLD_CONTINUED,
-					.si_errno = 0,
-					.si_pid = pid(),
-					.si_uid = m_credentials.ruid(),
-					.si_addr = nullptr,
-					.si_status = __WGENEXITCODE(0, signal),
-					.si_band = 0,
-					.si_value = { .sival_int = 0 },
-				});
-
-				if (!parent->m_threads.empty())
-					Processor::scheduler().unblock_thread(parent->m_threads.front());
+				break;
 			}
 		}
 
-		m_stopped = stopped;
-		m_stop_blocker.unblock();
+		if (send_sigchld)
+		{
+			parent->add_pending_signal(SIGCHLD, {
+				.si_signo = SIGCHLD,
+				.si_code = stopped ? CLD_STOPPED : CLD_CONTINUED,
+				.si_errno = 0,
+				.si_pid = pid(),
+				.si_uid = m_credentials.ruid(),
+				.si_addr = nullptr,
+				.si_status = __WGENEXITCODE(0, signal),
+				.si_band = 0,
+				.si_value = { .sival_int = 0 },
+			});
+
+			if (!parent->m_threads.empty())
+				Processor::scheduler().unblock_thread(parent->m_threads.front());
+		}
 	}
 
 	void Process::wait_while_stopped()
