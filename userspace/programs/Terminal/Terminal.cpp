@@ -119,6 +119,7 @@ void Terminal::run()
 	m_fg_color = s_default_fg_color;
 
 	auto attributes = LibGUI::Window::default_attributes;
+	attributes.shown = false;
 	attributes.alpha_channel = true;
 	attributes.resizable = true;
 
@@ -126,6 +127,9 @@ void Terminal::run()
 	m_window->texture().fill(m_bg_color);
 	m_window->texture().set_bg_color(m_bg_color);
 	m_window->invalidate();
+
+	attributes.shown = true;
+	m_window->set_attributes(attributes);
 
 	m_font = MUST(LibFont::Font::load("/usr/share/fonts/lat0-16.psfu"_sv));
 

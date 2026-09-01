@@ -212,6 +212,7 @@ int main()
 	auto font = MUST(LibFont::Font::load("/usr/share/fonts/lat0-16.psfu"_sv));
 
 	auto attributes = LibGUI::Window::default_attributes;
+	attributes.shown = false;
 	attributes.title_bar = false;
 	attributes.movable = false;
 	attributes.focusable = false;
@@ -229,9 +230,6 @@ int main()
 		if (event.pressed)
 			show_long = !show_long;
 	});
-
-	window->texture().fill(bg_color);
-	window->invalidate();
 
 	bool is_running = true;
 
@@ -259,6 +257,13 @@ int main()
 
 			old_text_w = text_w;
 		};
+
+	window->texture().fill(bg_color);
+	update_string();
+	window->invalidate();
+
+	attributes.shown = true;
+	window->set_attributes(attributes);
 
 	while (is_running)
 	{

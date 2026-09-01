@@ -179,6 +179,7 @@ struct Rectangle { uint32_t x, y, w, h; };
 int main()
 {
 	auto attributes = LibGUI::Window::default_attributes;
+	attributes.shown = false;
 	attributes.alpha_channel = true;
 	attributes.title_bar = false;
 
@@ -335,6 +336,9 @@ int main()
 	render_initial_window(*window, font);
 	refresh_search();
 	window->invalidate();
+
+	attributes.shown = true;
+	window->set_attributes(attributes);
 
 	for (;;)
 	{
