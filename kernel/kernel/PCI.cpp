@@ -928,8 +928,7 @@ namespace Kernel::PCI
 		uint64_t addr = device.read_dword(offset);
 
 		device.write_dword(offset, 0xFFFFFFFF);
-		uint32_t size = device.read_dword(offset);
-		size = ~size + 1;
+		const uint32_t size = ~device.read_dword(offset) + 1;
 		device.write_dword(offset, addr);
 
 		if (size == 0)
@@ -940,7 +939,7 @@ namespace Kernel::PCI
 		}
 
 		// determine bar type
-		BarType type = BarType::INVALID;
+		BarType type;
 		if (addr & 1)
 		{
 			type = BarType::IO;
@@ -955,12 +954,11 @@ namespace Kernel::PCI
 		{
 			type = BarType::MEM;
 			addr &= 0xFFFFFFF0;
-			addr |= (uint64_t)device.read_dword(offset + 4) << 32;
+			addr |= static_cast<uint64_t>(device.read_dword(offset + 4)) << 32;
 		}
-
-		if (type == BarType::INVALID)
+		else
 		{
-			dwarnln("invalid pci device bar");
+			dwarnln("BAR{} has type {3b}", bar_num, addr & 0b111);
 			return BAN::Error::from_errno(EINVAL);
 		}
 
