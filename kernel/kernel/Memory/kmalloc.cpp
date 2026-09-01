@@ -2,6 +2,8 @@
 #include <kernel/Memory/kmalloc.h>
 #include <kernel/Memory/PageTable.h>
 
+#define KMALLOC_FILL_WITH_GARBAGE 1
+
 static constexpr size_t s_allocator_chunk_size { 64 };
 static constexpr size_t s_allocator_align      { alignof(max_align_t) };
 
@@ -185,6 +187,11 @@ struct BitmapAllocator
 				set_bit(i + j, true);
 
 			auto& header = header_from_chunk(i);
+
+#if KMALLOC_FILL_WITH_GARBAGE
+			memset(&header, 0x69, needed_chunks * s_allocator_chunk_size);
+#endif
+
 			header.chunks = needed_chunks;
 
 			free_chunks -= header.chunks;
@@ -208,6 +215,10 @@ struct BitmapAllocator
 
 		free_chunks += header.chunks;
 		allocations--;
+
+#if KMALLOC_FILL_WITH_GARBAGE
+		memset(&header, 0x69, header.chunks * s_allocator_chunk_size);
+#endif
 	}
 };
 
@@ -240,6 +251,12 @@ static void kmalloc_dump_info()
 
 void* kmalloc(size_t size)
 {
+	if (size >= s_allocator_dynamic_size)
+	{
+		dwarnln("cannot allocate {} bytes, only up to {} is supported", size, s_allocator_dynamic_size);
+		return nullptr;
+	}
+
 	const size_t needed_chunks = BitmapAllocator::needed_chunks(size);
 
 	Kernel::SpinLockGuard _(s_kmalloc_lock);
