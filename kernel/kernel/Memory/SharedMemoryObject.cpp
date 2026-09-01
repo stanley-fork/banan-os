@@ -100,7 +100,7 @@ namespace Kernel
 			int id;
 			do {
 				id = Random::get<unsigned>() & BAN::numeric_limits<int>::max();
-			} while (m_ids.contains(shmid));
+			} while (m_ids.contains(id));
 			id;
 		});
 
