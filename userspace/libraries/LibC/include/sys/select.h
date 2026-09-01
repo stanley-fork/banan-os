@@ -14,38 +14,38 @@ __BEGIN_DECLS
 
 #define FD_SETSIZE 1024
 
-typedef unsigned long __fd_mask;
-#define __FD_MASK_SIZE (8 * sizeof(__fd_mask))
+typedef unsigned long fd_mask;
+#define NFDBITS (8 * sizeof(fd_mask))
 
 typedef struct {
-	__fd_mask __fds_bits[FD_SETSIZE / __FD_MASK_SIZE];
+	fd_mask __fds_bits[FD_SETSIZE / NFDBITS];
 } fd_set;
 
 #define FD_CLR(fd, setp) \
 	do { \
-		__fd_mask off = (fd) / __FD_MASK_SIZE; \
-		__fd_mask bit = (fd) % __FD_MASK_SIZE; \
-		(setp)->__fds_bits[off] &= ~((__fd_mask)1 << bit); \
+		fd_mask off = (fd) / NFDBITS; \
+		fd_mask bit = (fd) % NFDBITS; \
+		(setp)->__fds_bits[off] &= ~((fd_mask)1 << bit); \
 	} while (0)
 
 #define FD_ISSET(fd, setp) \
 	({ \
-		__fd_mask off = (fd) / __FD_MASK_SIZE; \
-		__fd_mask bit = (fd) % __FD_MASK_SIZE; \
-		(setp)->__fds_bits[off] & ((__fd_mask)1 << bit); \
+		fd_mask off = (fd) / NFDBITS; \
+		fd_mask bit = (fd) % NFDBITS; \
+		(setp)->__fds_bits[off] & ((fd_mask)1 << bit); \
 	})
 
 #define FD_SET(fd, setp) \
 	do { \
-		__fd_mask off = (fd) / __FD_MASK_SIZE; \
-		__fd_mask bit = (fd) % __FD_MASK_SIZE; \
-		(setp)->__fds_bits[off] |= ((__fd_mask)1 << bit); \
+		fd_mask off = (fd) / NFDBITS; \
+		fd_mask bit = (fd) % NFDBITS; \
+		(setp)->__fds_bits[off] |= ((fd_mask)1 << bit); \
 	} while (0)
 
 #define FD_ZERO(setp) \
 	do { \
-		for (int i = 0; i < (int)FD_SETSIZE / (int)__FD_MASK_SIZE; i++) \
-			(setp)->__fds_bits[i] = (__fd_mask)0; \
+		for (int i = 0; i < (int)FD_SETSIZE / (int)NFDBITS; i++) \
+			(setp)->__fds_bits[i] = (fd_mask)0; \
 	} while (0)
 
 struct sys_pselect_t
