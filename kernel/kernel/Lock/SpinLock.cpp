@@ -73,7 +73,7 @@ namespace Kernel
 		auto id = Processor::current_id().as_u32();
 
 		ProcessorID::value_type expected = PROCESSOR_NONE.as_u32();
-		while (!m_locker.compare_exchange(expected, id, BAN::MemoryOrder::memory_order_acq_rel))
+		while (!m_locker.compare_exchange(expected, id, BAN::MemoryOrder::memory_order_acquire))
 		{
 			if (expected == id)
 				break;
@@ -96,7 +96,7 @@ namespace Kernel
 		auto id = Processor::current_id().as_u32();
 
 		ProcessorID::value_type expected = PROCESSOR_NONE.as_u32();
-		if (!m_locker.compare_exchange(expected, id, BAN::MemoryOrder::memory_order_acq_rel))
+		if (!m_locker.compare_exchange(expected, id, BAN::MemoryOrder::memory_order_acquire))
 			if (expected != id)
 				return false;
 
