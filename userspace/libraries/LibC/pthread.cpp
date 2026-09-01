@@ -95,7 +95,7 @@ asm(
 	"xorl %ebp, %ebp;"
 	"subl $12, %esp;"
 	"pushl %edi;"
-	"call _pthread_trampoline_cpp"
+	"call _pthread_trampoline_cpp@plt"
 #endif
 );
 

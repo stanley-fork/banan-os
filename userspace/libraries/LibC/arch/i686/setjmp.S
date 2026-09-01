@@ -57,7 +57,7 @@ sigsetjmp:
 	movl %edx, 8(%esp)
 	movl %ecx, 4(%esp)
 	movl %ecx, 0(%esp)
-	call pthread_sigmask
+	call pthread_sigmask@plt
 	addl $12, %esp
 
 	jmp setjmp
