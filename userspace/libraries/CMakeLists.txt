@@ -27,6 +27,6 @@ foreach(library ${USERSPACE_LIBRARIES})
 		target_compile_options(${library_lower} PRIVATE -g -O2 -Wall -Wextra -Werror -msse -msse2)
 
 		# set SONAME as cmake doesn't set it for some reason??
-		set_target_properties(${library_lower} PROPERTIES LINK_FLAGS "-Wl,-soname,${library_lower}.so")
+		target_link_options(${library_lower} PRIVATE -Wl,-soname,${library_lower}.so)
 	endif()
 endforeach()
