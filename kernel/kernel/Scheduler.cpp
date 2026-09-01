@@ -1,4 +1,5 @@
 #include <BAN/Optional.h>
+#include <BAN/ScopeGuard.h>
 #include <BAN/Sort.h>
 #include <kernel/APIC.h>
 #include <kernel/GDT.h>
@@ -60,73 +61,41 @@ namespace Kernel
 		return {};
 	}
 
-	void Scheduler::add_current_to_most_loaded(void* target_list)
+	void Scheduler::add_current_to_most_loaded()
 	{
 		ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
 
-		bool has_current = false;
-		for (auto& info : m_most_loaded_threads)
+		for (const auto* thread : m_most_loaded_threads)
+			if (thread == m_current)
+				return;
+
+		for (size_t i = 0; i < m_most_loaded_threads.size(); i++)
 		{
-			if (info.node == m_current)
-			{
-				info.list = target_list;
-				has_current = true;
-				break;
-			}
+			if (m_most_loaded_threads[i] != nullptr)
+				continue;
+			m_most_loaded_threads[i] = m_current;
+			return;
 		}
 
-		if (!has_current)
-		{
-			size_t index = 0;
-			for (; index < m_most_loaded_threads.size() - 1; index++)
-				if (m_most_loaded_threads[index].node == nullptr)
-					break;
-			m_most_loaded_threads[index] = {
-				.list = target_list,
-				.node = m_current,
-			};
-		}
-
-		BAN::sort::sort(m_most_loaded_threads.begin(), m_most_loaded_threads.end(),
-			[](const ThreadInfo& a, const ThreadInfo& b) -> bool
-			{
-				if (a.node == nullptr || b.node == nullptr)
-					return a.node;
-				return a.node->time_used_ns > b.node->time_used_ns;
-			}
-		);
+		size_t min_index { 0 };
+		for (size_t i = 1; i < m_most_loaded_threads.size(); i++)
+			if (m_most_loaded_threads[i]->time_used_ns < m_most_loaded_threads[min_index]->time_used_ns)
+				min_index = i;
+		if (m_current->time_used_ns > m_most_loaded_threads[min_index]->time_used_ns)
+			m_most_loaded_threads[min_index] = m_current;
 	}
 
-	void Scheduler::update_most_loaded_node_list(SchedulerThreadNode* node, void* target_list)
+	void Scheduler::remove_current_from_most_loaded()
 	{
 		ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
 
-		for (auto& info : m_most_loaded_threads)
+		for (size_t i = 0; i < m_most_loaded_threads.size(); i++)
 		{
-			if (info.node == node)
-			{
-				info.list = target_list;
-				break;
-			}
+			if (m_most_loaded_threads[i] != m_current)
+				continue;
+			m_most_loaded_threads[i] = nullptr;
+			return;
 		}
-	}
-
-	void Scheduler::remove_node_from_most_loaded(SchedulerThreadNode* node)
-	{
-		ASSERT(Processor::get_interrupt_state() == InterruptState::Disabled);
-
-		size_t i = 0;
-		for (; i < m_most_loaded_threads.size(); i++)
-			if (m_most_loaded_threads[i].node == node)
-				break;
-
-		for (; i < m_most_loaded_threads.size() - 1; i++)
-			m_most_loaded_threads[i] = m_most_loaded_threads[i + 1];
-
-		m_most_loaded_threads.back() = {
-			.list = nullptr,
-			.node = nullptr,
-		};
 	}
 
 	void Scheduler::reschedule(YieldRegisters* yield_registers)
@@ -147,7 +116,7 @@ namespace Kernel
 			{
 				case Thread::State::Terminated:
 				{
-					remove_node_from_most_loaded(m_current);
+					remove_current_from_most_loaded();
 					if (&PageTable::current() != &PageTable::kernel())
 						PageTable::kernel().load();
 					auto* thread = m_current->thread;
@@ -159,7 +128,7 @@ namespace Kernel
 				case Thread::State::Executing:
 					m_current->thread->yield_registers() = *yield_registers;
 					m_current->time_used_ns += SystemTimer::get().ns_since_boot() - m_current->last_start_ns;
-					add_current_to_most_loaded(m_current->blocked ? static_cast<void*>(&m_block_list) : &m_run_list);
+					add_current_to_most_loaded();
 					if (!m_current->blocked)
 						m_run_list.push(m_current);
 					else
@@ -167,13 +136,12 @@ namespace Kernel
 						m_block_list.push(m_current);
 						if (m_block_list.front() == m_current)
 							update_wake_up_deadline();
-						Processor::set_disable_smp_messages(false);
 					}
 					break;
 				case Thread::State::NotStarted:
 					ASSERT(!m_current->blocked);
 					m_current->time_used_ns = 0;
-					remove_node_from_most_loaded(m_current);
+					remove_current_from_most_loaded();
 					m_run_list.push(m_current);
 					break;
 			}
@@ -193,8 +161,6 @@ namespace Kernel
 
 		ASSERT(m_current->thread->state() != Thread::State::Terminated);
 		ASSERT(!m_current->blocked);
-
-		update_most_loaded_node_list(m_current, nullptr);
 
 		auto* thread = m_current->thread;
 
@@ -265,7 +231,9 @@ namespace Kernel
 
 	extern "C" void scheduler_on_yield_trampoline(YieldRegisters* yield_registers)
 	{
+		Processor::set_disable_smp_messages(true);
 		Processor::scheduler().on_yield(yield_registers);
+		Processor::set_disable_smp_messages(false);
 	}
 
 	void Scheduler::on_yield(YieldRegisters* yield_registers)
@@ -326,6 +294,13 @@ namespace Kernel
 		if (current_ns < m_last_load_balance_ns + s_load_balance_interval_ns)
 			return;
 
+		Processor::set_disable_smp_messages(true);
+		BAN::ScopeGuard _([] {
+			Processor::set_disable_smp_messages(false);
+		});
+
+		const auto current_id = Processor::current_id();
+
 		if (m_current == nullptr)
 		{
 			m_idle_ns += current_ns - m_idle_start_ns;
@@ -335,7 +310,7 @@ namespace Kernel
 		{
 			m_current->time_used_ns += current_ns - m_current->last_start_ns;
 			m_current->last_start_ns = current_ns;
-			add_current_to_most_loaded(nullptr);
+			add_current_to_most_loaded();
 		}
 
 		if constexpr(DEBUG_SCHEDULER)
@@ -343,9 +318,11 @@ namespace Kernel
 			const uint64_t duration_ns = current_ns - m_last_load_balance_ns;
 			const uint64_t processing_ns = duration_ns - m_idle_ns;
 
+			SpinLockGuard _(Debug::s_debug_lock);
+
 			{
 				const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(processing_ns * 100'000, duration_ns);
-				dprintln("CPU {}: { 2}.{3}% ({} threads)", Processor::current_id(), load_percent_x1000 / 1000, load_percent_x1000 % 1000, m_thread_count);
+				dprintln("CPU {}: { 2}.{3}% ({} threads)", current_id, load_percent_x1000 / 1000, load_percent_x1000 % 1000, m_thread_count);
 			}
 
 			if (m_current)
@@ -354,25 +331,33 @@ namespace Kernel
 				if (m_current->thread->has_process() && *m_current->thread->process().name())
 					name = m_current->thread->process().name();
 				const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(m_current->time_used_ns * 100'000, processing_ns);
-				dprintln("  tid { 2}: { 3}.{3}% <{}> current", m_current->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000, name);
+				dprintln("  tid { 2}: { 3}.{3}% current {}", m_current->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000, name);
 			}
-			m_run_list.walk(
-				[](const SchedulerThreadNode* node, void* arg)
-				{
-					const uint64_t processing_ns = *static_cast<const uint64_t*>(arg);
-					const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(node->time_used_ns * 100'000, processing_ns);
-					dprintln("  tid { 2}: { 3}.{3}% active", node->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000);
-				}, const_cast<uint64_t*>(&processing_ns)
-			);
-			m_block_list.walk(
-				[](const SchedulerThreadNode* node, void* arg)
-				{
-					const uint64_t processing_ns = *static_cast<const uint64_t*>(arg);
-					const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(node->time_used_ns * 100'000, processing_ns);
-					dprintln("  tid { 2}: { 3}.{3}% blocked", node->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000);
-				}, const_cast<uint64_t*>(&processing_ns)
-			);
+
+			m_run_list.walk([](const SchedulerThreadNode* node, void* arg) {
+				const char* name = "<unknown>";
+				if (node->thread->has_process() && *node->thread->process().name())
+					name = node->thread->process().name();
+				const uint64_t processing_ns = *static_cast<const uint64_t*>(arg);
+				const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(node->time_used_ns * 100'000, processing_ns);
+				dprintln("  tid { 2}: { 3}.{3}% active {}", node->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000, name);
+			}, const_cast<uint64_t*>(&processing_ns));
+
+			m_block_list.walk([](const SchedulerThreadNode* node, void* arg) {
+				const char* name = "<unknown>";
+				if (node->thread->has_process() && *node->thread->process().name())
+					name = node->thread->process().name();
+				const uint64_t processing_ns = *static_cast<const uint64_t*>(arg);
+				const uint64_t load_percent_x1000 = BAN::Math::div_round_up<uint64_t>(node->time_used_ns * 100'000, processing_ns);
+				dprintln("  tid { 2}: { 3}.{3}% blocked {}", node->thread->tid(), load_percent_x1000 / 1000, load_percent_x1000 % 1000, name);
+			}, const_cast<uint64_t*>(&processing_ns));
 		}
+
+		BAN::sort::sort(m_most_loaded_threads.begin(), m_most_loaded_threads.end(), [](auto* a, auto* b) {
+			if (a == nullptr || b == nullptr)
+				return a != nullptr;
+			return a->time_used_ns > b->time_used_ns;
+		});
 
 		if (!s_processor_info_time_lock.try_lock_interrupts_disabled())
 		{
@@ -383,18 +368,18 @@ namespace Kernel
 		if (m_idle_ns == 0 && m_should_calculate_max_load_threads)
 		{
 			const auto& most_loaded_thread = m_most_loaded_threads.front();
-			if (most_loaded_thread.node == nullptr || most_loaded_thread.node->time_used_ns == 0)
-				s_processor_infos[Processor::current_id().as_u32()].max_load_threads = 0;
+			if (most_loaded_thread == nullptr || most_loaded_thread->time_used_ns == 0)
+				s_processor_infos[current_id.as_u32()].max_load_threads = 0;
 			else
 			{
 				const uint64_t duration_ns = current_ns - m_last_load_balance_ns;
-				const uint64_t max_thread_load_x1000 = 1000 * most_loaded_thread.node->time_used_ns / duration_ns;
+				const uint64_t max_thread_load_x1000 = 1000 * most_loaded_thread->time_used_ns / duration_ns;
 				if (max_thread_load_x1000 == 0)
-					s_processor_infos[Processor::current_id().as_u32()].max_load_threads = 0;
+					s_processor_infos[current_id.as_u32()].max_load_threads = 0;
 				else
 				{
 					const uint64_t max_load_thread_count = ((2000 / max_thread_load_x1000) + 1) / 2;
-					s_processor_infos[Processor::current_id().as_u32()].max_load_threads = max_load_thread_count;
+					s_processor_infos[current_id.as_u32()].max_load_threads = max_load_thread_count;
 				}
 			}
 		}
@@ -403,18 +388,19 @@ namespace Kernel
 
 		for (size_t i = 1; i < m_most_loaded_threads.size(); i++)
 		{
-			auto& thread_info = m_most_loaded_threads[i];
-			if (thread_info.node == nullptr)
+			auto* heavy_thread = m_most_loaded_threads[i];
+			if (heavy_thread == nullptr)
 				break;
-			if (thread_info.node == m_current || thread_info.list == nullptr)
+			ASSERT(heavy_thread->processor_id == current_id);
+			if (heavy_thread == m_current)
 				continue;
 
-			auto least_loaded_id = find_least_loaded_processor();
-			if (least_loaded_id == Processor::current_id())
+			const auto least_loaded_id = find_least_loaded_processor();
+			if (least_loaded_id == current_id)
 				break;
 
 			auto& most_idle_info = s_processor_infos[least_loaded_id.as_u32()];
-			auto& my_info = s_processor_infos[Processor::current_id().as_u32()];
+			auto& my_info = s_processor_infos[current_id.as_u32()];
 
 			if (m_idle_ns == 0)
 			{
@@ -429,7 +415,7 @@ namespace Kernel
 					my_info.max_load_threads        -= 1;
 					most_idle_info.max_load_threads += 1;
 
-					dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {} (max load)", Processor::current_id(), thread_info.node->thread->tid(), least_loaded_id);
+					dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {} (max load)", current_id, heavy_thread->thread->tid(), least_loaded_id);
 				}
 				else
 				{
@@ -437,7 +423,7 @@ namespace Kernel
 					most_idle_info.idle_time_ns      = 0;
 					most_idle_info.max_load_threads  = 1;
 
-					dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {}", Processor::current_id(), thread_info.node->thread->tid(), least_loaded_id);
+					dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {}", current_id, heavy_thread->thread->tid(), least_loaded_id);
 				}
 			}
 			else
@@ -446,21 +432,21 @@ namespace Kernel
 				const uint64_t other_current_proc_ns = s_load_balance_interval_ns - BAN::Math::min(s_load_balance_interval_ns, most_idle_info.idle_time_ns);
 				const uint64_t current_proc_diff_ns  = absolute_difference_u64(my_current_proc_ns, other_current_proc_ns);
 
-				const uint64_t my_new_proc_ns    = my_current_proc_ns    - BAN::Math::min(thread_info.node->time_used_ns, my_current_proc_ns);
-				const uint64_t other_new_proc_ns = other_current_proc_ns + thread_info.node->time_used_ns;
+				const uint64_t my_new_proc_ns    = my_current_proc_ns    - BAN::Math::min(heavy_thread->time_used_ns, my_current_proc_ns);
+				const uint64_t other_new_proc_ns = other_current_proc_ns + heavy_thread->time_used_ns;
 				const uint64_t new_proc_diff_ns  = absolute_difference_u64(my_new_proc_ns, other_new_proc_ns);
 
 				// require 10% decrease between CPU loads to do send thread to other CPU
 				if (new_proc_diff_ns >= current_proc_diff_ns || (100 * (current_proc_diff_ns - new_proc_diff_ns) / current_proc_diff_ns) < 10)
 					continue;
 
-				most_idle_info.idle_time_ns -= BAN::Math::min(thread_info.node->time_used_ns, most_idle_info.idle_time_ns);
-				m_idle_ns                   += thread_info.node->time_used_ns;
+				most_idle_info.idle_time_ns -= BAN::Math::min(heavy_thread->time_used_ns, most_idle_info.idle_time_ns);
+				m_idle_ns                   += heavy_thread->time_used_ns;
 
-				dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {}", Processor::current_id(), thread_info.node->thread->tid(), least_loaded_id);
+				dprintln_if(DEBUG_SCHEDULER, "CPU {}: sending tid {} to CPU {}", current_id, heavy_thread->thread->tid(), least_loaded_id);
 			}
 
-			if (auto* thread = thread_info.node->thread; thread == Processor::get_current_sse_thread())
+			if (auto* thread = heavy_thread->thread; thread == Processor::get_current_sse_thread())
 			{
 				Processor::enable_sse();
 				thread->save_sse();
@@ -468,38 +454,43 @@ namespace Kernel
 				Processor::disable_sse();
 			}
 
-			thread_info.node->time_used_ns = 0;
+			heavy_thread->time_used_ns = 0;
 
-			if (thread_info.list == &m_run_list)
-				m_run_list.pop(thread_info.node);
+			if (!heavy_thread->blocked)
+				m_run_list.pop(heavy_thread);
 			else
-				m_block_list.pop(thread_info.node);
+			{
+				// NOTE: we spuriously wakeup threads on load balance as there is a race between
+				//       changing owning processor and sending the SMP message
+				m_block_list.pop(heavy_thread);
+				if (auto* blocker = heavy_thread->blocker.load())
+					blocker->remove_thread_from_block_queue(heavy_thread);
+				heavy_thread->blocked = false;
+			}
+
 			m_thread_count--;
 
-			thread_info.node->processor_id = least_loaded_id;
+			heavy_thread->processor_id = least_loaded_id;
 			Processor::send_smp_message(least_loaded_id, {
 				.type = Processor::SMPMessage::Type::NewThread,
-				.new_thread = thread_info.node->thread
+				.new_thread = heavy_thread->thread
 			});
 
-			thread_info = {
-				.list = nullptr,
-				.node = nullptr,
-			};
+			m_most_loaded_threads[i] = nullptr;
 
 			if (m_idle_ns == 0)
 				break;
 		}
 
-		s_processor_infos[Processor::current_id().as_u32()].idle_time_ns = m_idle_ns;
+		s_processor_infos[current_id.as_u32()].idle_time_ns = m_idle_ns;
 		s_processor_info_time_lock.unlock(InterruptState::Disabled);
 
 		if (m_current)
 			m_current->time_used_ns = 0;
-		for (auto& thread_info : m_most_loaded_threads)
-			thread_info = {};
-		m_run_list  .walk([](const SchedulerThreadNode* node, void*) { const_cast<SchedulerThreadNode*>(node)->time_used_ns = 0; }, nullptr);
-		m_block_list.walk([](const SchedulerThreadNode* node, void*) { const_cast<SchedulerThreadNode*>(node)->time_used_ns = 0; }, nullptr);
+		for (auto*& thread : m_most_loaded_threads)
+			thread = nullptr;
+		m_run_list  .walk([](const auto* node, void*) { const_cast<SchedulerThreadNode*>(node)->time_used_ns = 0; }, nullptr);
+		m_block_list.walk([](const auto* node, void*) { const_cast<SchedulerThreadNode*>(node)->time_used_ns = 0; }, nullptr);
 		m_idle_ns = 0;
 
 		m_should_calculate_max_load_threads = true;
@@ -538,14 +529,8 @@ namespace Kernel
 		const auto state = Processor::get_interrupt_state();
 		Processor::set_interrupt_state(InterruptState::Disabled);
 
-		if (!thread->m_scheduler_node.blocked)
-			m_run_list.push(&thread->m_scheduler_node);
-		else
-		{
-			m_block_list.push(&thread->m_scheduler_node);
-			if (m_block_list.front() == &thread->m_scheduler_node)
-				update_wake_up_deadline();
-		}
+		ASSERT(!thread->m_scheduler_node.blocked);
+		m_run_list.push(&thread->m_scheduler_node);
 
 		if (thread->is_userspace() && thread->has_process())
 			thread->update_processor_index_address();
@@ -584,7 +569,12 @@ namespace Kernel
 		for (uint32_t i = 0; i < lock_depth; i++)
 			mutex->unlock();
 
+		Processor::set_disable_smp_messages(false);
+
 		Processor::yield();
+
+		// NOTE: we cannot touch `this` after yield as we may have been moved to another CPU
+		//       and thus another Scheduler instance
 
 		Processor::set_interrupt_state(state);
 
@@ -594,25 +584,20 @@ namespace Kernel
 
 	void Scheduler::unblock_thread(Thread* thread)
 	{
+		const auto state = Processor::get_interrupt_state();
+		Processor::set_interrupt_state(InterruptState::Disabled);
+
 		if (const auto proc_id = thread->m_scheduler_node.processor_id; proc_id != Processor::current_id())
 		{
 			Processor::send_smp_message(proc_id, {
 				.type = Processor::SMPMessage::Type::UnblockThread,
 				.unblock_thread = thread
 			});
-			return;
+			return Processor::set_interrupt_state(state);
 		}
-
-		const auto state = Processor::get_interrupt_state();
-		Processor::set_interrupt_state(InterruptState::Disabled);
 
 		if (!thread->m_scheduler_node.blocked)
-		{
-			Processor::set_interrupt_state(state);
-			return;
-		}
-
-		ASSERT(&thread->m_scheduler_node != m_current);
+			return Processor::set_interrupt_state(state);
 
 		Processor::set_disable_smp_messages(true);
 
@@ -622,7 +607,6 @@ namespace Kernel
 		thread->m_scheduler_node.blocked = false;
 
 		m_run_list.push(&thread->m_scheduler_node);
-		update_most_loaded_node_list(&thread->m_scheduler_node, &m_run_list);
 
 		Processor::set_disable_smp_messages(false);
 

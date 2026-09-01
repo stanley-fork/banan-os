@@ -56,9 +56,8 @@ namespace Kernel
 	private:
 		Scheduler() = default;
 
-		void add_current_to_most_loaded(void* target_list);
-		void update_most_loaded_node_list(SchedulerThreadNode*, void* target_list);
-		void remove_node_from_most_loaded(SchedulerThreadNode*);
+		void add_current_to_most_loaded();
+		void remove_current_from_most_loaded();
 
 		void update_wake_up_deadline();
 		void wake_up_sleeping_threads();
@@ -77,12 +76,7 @@ namespace Kernel
 		uint64_t m_next_reschedule_ns { 0 };
 		uint64_t m_last_load_balance_ns { 0 };
 
-		struct ThreadInfo
-		{
-			void*                list { nullptr };
-			SchedulerThreadNode* node { nullptr };
-		};
-		BAN::Array<ThreadInfo, 10> m_most_loaded_threads;
+		BAN::Array<SchedulerThreadNode*, 8> m_most_loaded_threads;
 
 		uint64_t m_idle_start_ns { 0 };
 		uint64_t m_idle_ns { 0 };
