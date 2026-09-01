@@ -305,6 +305,7 @@ extern "C" void ap_main()
 	using namespace Kernel;
 
 	Processor::initialize();
+	PageTable::kernel().load();
 
 	InterruptController::get().enable();
 
