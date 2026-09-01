@@ -187,22 +187,23 @@ static T ldexp_impl(T x, long e)
 	return decompose.raw;
 }
 
-static long double tgamma_impl(long double x)
+template<BAN::floating_point T>
+static T tgamma_impl(T x)
 {
-	constexpr long double pi = BAN::numbers::pi_v<long double>;
+	constexpr T pi = BAN::numbers::pi_v<T>;
 
-	if (x == 0.0L)
-		return BAN::numeric_limits<long double>::infinity();
+	if (x == T(0.0))
+		return BAN::numeric_limits<T>::infinity();
 
 	// reflection formula
-	if (x < 0.5L)
-		return pi / (BAN::Math::sin(pi * x) * tgamma_impl(1.0L - x));
-	x -= 1.0L;
+	if (x < T(0.5))
+		return pi / (BAN::Math::sin<T>(pi * x) * tgamma_impl<T>(T(1.0) - x));
+	x -= T(1.0);
 
 	// Lanczos approximation
 
-	constexpr long double g = 8.0L;
-	constexpr long double p[] {
+	constexpr T g = 8.0;
+	constexpr T p[] {
 		 0.9999999999999999298e+0L,
 		 1.9753739023578852322e+3L,
 		-4.3973823927922428918e+3L,
@@ -214,29 +215,28 @@ static long double tgamma_impl(long double x)
 		-7.4776171974442977377e-7L,
 		 6.3041253821852264261e-8L,
 		-2.7405717035683877489e-8L,
-		 4.0486948817567609101e-9L
+		 4.0486948817567609101e-9L,
 	};
-	constexpr long double sqrt_2pi = 2.5066282746310005024L;
+	constexpr T sqrt_2pi = 2.5066282746310005024L;
 
-	long double A = p[0];
+	T A = p[0];
 	for (size_t i = 1; i < sizeof(p) / sizeof(*p); i++)
 		A += p[i] / (x + i);
 
-	const long double t = x + g + 0.5L;
-	return sqrt_2pi * BAN::Math::pow(t, x + 0.5L) * BAN::Math::exp(-t) * A;
+	const T t = x + g + T(0.5);
+	return sqrt_2pi * BAN::Math::pow<T>(t, x + T(0.5)) * BAN::Math::exp<T>(-t) * A;
 }
 
-static long double erf_impl(long double x)
+template<BAN::floating_point T>
+static T erf_impl(T x)
 {
-	long double sum = 0.0L;
+	T sum = T(0.0);
 	for (size_t n = 0; n < 100; n++)
-		sum += x / (2.0L * n + 1.0L) * ldexp_impl(-x * x, n) / tgamma_impl(n + 1.0L);
+		sum += x / (T(2.0) * n + T(1.0)) * ldexp_impl<T>(-x * x, n) / tgamma_impl<T>(n + T(1.0));
 
-	constexpr long double sqrt_pi = 1.77245385090551602729L;
-	return 2.0L / sqrt_pi * sum;
+	constexpr T sqrt_pi = 1.77245385090551602729L;
+	return T(2.0) / sqrt_pi * sum;
 }
-
-__BEGIN_DECLS
 
 // FIXME: add handling for nan and infinity values
 
@@ -314,5 +314,3 @@ void sincosl(long double x, long double* sin, long double* cos)
 {
 	BAN::Math::sincos(x, *sin, *cos);
 }
-
-__END_DECLS
