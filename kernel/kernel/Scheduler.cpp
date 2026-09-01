@@ -146,12 +146,16 @@ namespace Kernel
 			switch (m_current->thread->state())
 			{
 				case Thread::State::Terminated:
+				{
 					remove_node_from_most_loaded(m_current);
 					if (&PageTable::current() != &PageTable::kernel())
 						PageTable::kernel().load();
-					delete m_current->thread;
+					auto* thread = m_current->thread;
+					m_current = nullptr;
+					delete thread;
 					m_thread_count--;
 					break;
+				}
 				case Thread::State::Executing:
 					m_current->thread->yield_registers() = *yield_registers;
 					m_current->time_used_ns += SystemTimer::get().ns_since_boot() - m_current->last_start_ns;
@@ -175,16 +179,7 @@ namespace Kernel
 			}
 		}
 
-		while ((m_current = m_run_list.pop_front()))
-		{
-			if (m_current->thread->state() != Thread::State::Terminated)
-				break;
-			remove_node_from_most_loaded(m_current);
-			if (&PageTable::current() != &PageTable::kernel())
-				PageTable::kernel().load();
-			delete m_current->thread;
-			m_thread_count--;
-		}
+		m_current = m_run_list.pop_front();
 
 		if (m_current == nullptr)
 		{
@@ -195,6 +190,9 @@ namespace Kernel
 			m_idle_start_ns        = SystemTimer::get().ns_since_boot();
 			return;
 		}
+
+		ASSERT(m_current->thread->state() != Thread::State::Terminated);
+		ASSERT(!m_current->blocked);
 
 		update_most_loaded_node_list(m_current, nullptr);
 
